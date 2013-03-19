@@ -59,9 +59,9 @@ def gendata():
     patch_shape = (32, 32)
     num_patches = [1e6, 5e5, 1e6, 1e6]
     
-    datasets = [GWData(which_set = 'train', start=0, stop=283),
-                GWData(which_set = 'train', start=283, stop=475),
-                GWData(which_set = 'test', start=0, stop=283),
+    datasets = [GWData(which_set = 'train', start=0, stop=282),
+                GWData(which_set = 'train', start=282, stop=475),
+                GWData(which_set = 'test', start=0, stop=282),
                 GWData(which_set = 'train')]
     
     for ii, curstr in enumerate(('train', 'valid', 'test', 'tottrain')):
