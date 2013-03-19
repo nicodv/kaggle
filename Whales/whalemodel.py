@@ -22,7 +22,7 @@ from pylearn2.base import StackedBlocks
 from pylearn2.datasets.transformer_dataset import TransformerDataset
 from sklearn.metrics.metrics import auc_score
 
-DATA_DIR = '/home/nico/Code/datasets/Kaggle data/Whales/'
+DATA_DIR = '/home/nico/Code/datasets/Kaggle/Whales/'
 
 
 class Whales(DenseDesignMatrix):
