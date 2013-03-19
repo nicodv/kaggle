@@ -2,13 +2,12 @@ import numpy as np
 import pandas as pd
 import string
 from sklearn import cross_validation, ensemble, pipeline, \
-					grid_search, metrics, svm, preprocessing, neighbors, decomposition
+			grid_search, metrics, svm, preprocessing, neighbors, decomposition
 
-dpath='/home/nico/temp/Kaggle data/Titanic/'
-path='/home/nico/Dropbox/Research Projects/Kaggle/Titanic/'
+DATA_DIR = '/home/nico/datasets/Kaggle/Titanic/'
 
-traindata = pd.read_csv(dpath+'train.csv')
-testdata = pd.read_csv(dpath+'test.csv')
+traindata = pd.read_csv(DATA_DIR+'train.csv')
+testdata = pd.read_csv(DATA_DIR+'test.csv')
 
 def prepare_data(d):
 
@@ -206,10 +205,9 @@ predtot[Fmask[Fmask==False].index.tolist()] = predM
 
 # export
 totdata.survived[totdata.train==0] = predtot
-totdata.to_csv(path+'rawdata.txt', sep=',', header=True, index=False)
+totdata.to_csv(DATA_DIR+'rawdata.txt', sep=',', header=True, index=False)
 
 print "Fraction survivors: %d / %d" % (sum(predtot), len(predtot))
 
 # save to CSV
-predtot.to_csv(path+'submission.csv', \
-					sep=',', header=False, index=False)
+predtot.to_csv(DATA_DIR+'submission.csv', sep=',', header=False, index=False)
