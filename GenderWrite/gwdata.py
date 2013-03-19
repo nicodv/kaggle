@@ -29,7 +29,7 @@ class GWData(DenseDesignMatrix):
             y = y[start:stop]
             assert X.shape[0] == y.shape[0]
             
-        view_converter = DefaultViewConverter((36,36,1))
+        view_converter = DefaultViewConverter((X.shape[1],X.shape[2],1))
         
         super(GWData,self).__init__(X=X, y=y, view_converter=view_converter)
         
