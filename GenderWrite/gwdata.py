@@ -10,7 +10,7 @@ DATA_DIR = '/home/nico/Code/datasets/Kaggle/GenderWrite/'
 
 class GWData(DenseDesignMatrix):
     
-    def __init__(self, which_set, start=None, stop=None, preprocessor=None):
+    def __init__(self, which_set, start=None, stop=None):
         assert which_set in ['train','test']
         
         if which_set == 'train':
@@ -55,23 +55,24 @@ class GWData(DenseDesignMatrix):
         
         assert not np.any(np.isnan(self.X))
         
-        if preprocessor:
-            preprocessor.apply(self)
-
 def gendata():
+    patch_shape = (32, 32)
+    num_patches = [1e6, 5e5, 1e6, 1e6]
+    
     datasets = [GWData(which_set = 'train', start=0, stop=283),
                 GWData(which_set = 'train', start=283, stop=475),
                 GWData(which_set = 'test', start=0, stop=283),
                 GWData(which_set = 'train')]
     
-    pipeline = preprocessing.Pipeline()
-    pipeline.items.append(preprocessing.ExtractPatches(patch_shape=(32, 32), num_patches=100000))
-    pipeline.items.append(preprocessing.GlobalContrastNormalization())
-    pipeline.items.append(preprocessing.ZCA())
-    
     for ii, curstr in enumerate(('train', 'valid', 'test', 'tottrain')):
+        # preprocess
+        pipeline = preprocessing.Pipeline()
+        pipeline.items.append(preprocessing.ExtractPatches(patch_shape=patch_shape, num_patches=num_patches[ii]))
+        pipeline.items.append(preprocessing.GlobalContrastNormalization())
+        pipeline.items.append(preprocessing.ZCA())
         trainbool = curstr == 'train' or curstr == 'tottrain'
         datasets[ii].apply_preprocessor(preprocessor=pipeline, can_fit=trainbool)
+        # save
         use_design_loc(curstr+'_design.npy')
         serial.save('/home/nico/datasets/Kaggle/GenderWriting/gw_preprocessed_'+curstr+'.pkl', datasets[ii])
 
