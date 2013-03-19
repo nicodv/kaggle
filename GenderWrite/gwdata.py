@@ -3,6 +3,7 @@
 import os
 import numpy as np
 from pylearn2.datasets.dense_design_matrix import DenseDesignMatrix, DefaultViewConverter
+from pylearn2.utils import serial
 import Image
 
 DATA_DIR = '/home/nico/Code/datasets/Kaggle/GenderWrite/'
@@ -56,3 +57,23 @@ class GWData(DenseDesignMatrix):
         
         if preprocessor:
             preprocessor.apply(self)
+
+def gendata():
+    datasets = [GWData(which_set = 'train', start=0, stop=283),
+                GWData(which_set = 'train', start=283, stop=475),
+                GWData(which_set = 'test', start=0, stop=283),
+                GWData(which_set = 'train')]
+    
+    pipeline = preprocessing.Pipeline()
+    pipeline.items.append(preprocessing.ExtractPatches(patch_shape=(32, 32), num_patches=100000))
+    pipeline.items.append(preprocessing.GlobalContrastNormalization())
+    pipeline.items.append(preprocessing.ZCA())
+    
+    for ii, curstr in enumerate(('train', 'valid', 'test', 'tottrain')):
+        trainbool = curstr == 'train' or curstr == 'tottrain'
+        datasets[ii].apply_preprocessor(preprocessor=pipeline, can_fit=trainbool)
+        use_design_loc(curstr+'_design.npy')
+        serial.save('/home/nico/datasets/Kaggle/GenderWriting/gw_preprocessed_'+curstr+'.pkl', datasets[ii])
+
+if __name__ == '__main__':
+    gendata()
