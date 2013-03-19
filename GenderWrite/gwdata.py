@@ -10,10 +10,9 @@ DATA_DIR = '/home/nico/Code/datasets/Kaggle/GenderWrite/'
 class GWData(DenseDesignMatrix):
     
     def __init__(self, which_set, start=None, stop=None, preprocessor=None):
-        assert which_set in ['train','valid','test']
+        assert which_set in ['train','test']
         
-        t_set = 'train' if which_set=='valid' else which_set
-        X = np.load(os.path.join(DATA_DIR,t_set+'.npy'))
+        X = np.load(os.path.join(DATA_DIR,which_set+'.npy'))
         X = np.cast['float32'](X)
         X = np.reshape(X,(X.shape[0], np.prod(X.shape[1:])))
         
