@@ -90,7 +90,6 @@ def get_dataset(which_data, tot=False):
         pipeline = preprocessing.Pipeline()
         
         if which_data in ('spectrum', 'melspectrum'):
-            # standardization
             pipeline.items.append(preprocessing.Standardize(global_mean=True, global_std=True))
         else:
             # global_mean/std=False voor per-feature standardization
@@ -107,6 +106,7 @@ def get_dataset(which_data, tot=False):
         validset.use_design_loc(DATA_DIR+'/valid_'+which_data+'_design.npy')
         tottrainset.apply_preprocessor(preprocessor=pipeline, can_fit=True)
         tottrainset.use_design_loc(DATA_DIR+'/tottrain_'+which_data+'_design.npy')
+        # note the can_fit=False: no sharing between train and test data
         testset.apply_preprocessor(preprocessor=pipeline, can_fit=False)
         testset.use_design_loc(DATA_DIR+'/test_'+which_data+'_design.npy')
         
