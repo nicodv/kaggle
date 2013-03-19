@@ -7,9 +7,9 @@ import yaafelib as yl
 import re
 import pandas as pd
 
-traindir ='/home/nico/Code/datasets/Kaggle/Whales/train'
-testdir  ='/home/nico/Code/datasets/Kaggle/Whales/test'
-datdir   ='/home/nico/Code/datasets/Kaggle/Whales'
+traindir ='/home/nico/datasets/Kaggle/Whales/train'
+testdir  ='/home/nico/datasets/Kaggle/Whales/test'
+datdir   ='/home/nico/datasets/Kaggle/Whales'
 
 SAMPLE_RATE = 2000
 SAMPLE_LENGTH = 2
