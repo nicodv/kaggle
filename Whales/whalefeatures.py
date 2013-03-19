@@ -67,19 +67,10 @@ def extract_audio_features(sigdata):
         
     return feats
 
-def standardize_signals(sigs):
-    meansig = np.mean(sigs, axis=1)
-    stdsig = np.std(sigs, axis=1)
-    return (sigs - meansig[:, np.newaxis]) / stdsig[:, np.newaxis]
-
 if __name__ == '__main__':
     for curstr in ('train','test'):
         # read samples and store file numbers
         numbers, sigs = read_samples(eval(curstr+'dir'))
-        
-        # this is not cheating: samples are standardized based on their own data,
-        # so no mixing between samples, let alone between train and test data
-        sigs = standardize_signals(sigs)
         
         if curstr == 'train':
             # add DCLDE 2013 Workshop Dataset data
@@ -87,7 +78,6 @@ if __name__ == '__main__':
             extnumbers = range(1,6672)
             numbers.extend(extnumbers)
             extradata = np.genfromtxt(datdir+'/extra/signals.csv', delimiter=',')
-            extradata = standardize_signals(extradata)
             sigs = np.concatenate((sigs,extradata))
             assert len(numbers)==len(sigs)
         
