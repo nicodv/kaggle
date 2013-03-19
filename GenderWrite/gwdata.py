@@ -1,12 +1,12 @@
 #!/usr/bin/python
 
-import os
 import numpy as np
 from pylearn2.datasets.dense_design_matrix import DenseDesignMatrix, DefaultViewConverter
+from pylearn2.datasets import preprocessing
 from pylearn2.utils import serial
 import Image
 
-DATA_DIR = '/home/nico/Code/datasets/Kaggle/GenderWrite/'
+DATA_DIR = '/home/nico/datasets/Kaggle/Genderwrite/'
 
 class GWData(DenseDesignMatrix):
     
@@ -20,15 +20,15 @@ class GWData(DenseDesignMatrix):
             
         X = []
         for writer in writers:
-            curstr = '0'+str(num)
+            wrstr = str(writer).zfill(4)
             images = []
             for page in range(1,5):
-                im = Image.open(DATA_DIR+writer+'_'+page+'.jpg'))
+                im = Image.open(DATA_DIR+wrstr+'_'+str(page)+'.jpg')
                 # crop and resize
-                im = im.crop((100,100,im.size[0]-100,im.size[1]-100))
+                #im = im.crop((100,100,im.size[0]-100,im.size[1]-100))
                 rfactor = 2
-                im.resize((im.size[0]/rfactor,im.size[1]/rfactor, Image.ANTIALIAS)
-                images.append(numpy.array(im.getdata()))
+                im.resize((im.size[0]/rfactor,im.size[1]/rfactor), Image.ANTIALIAS)
+                images.append(np.array(list(im.getdata())))
             # merge pages
             X.append(images)
         
@@ -54,7 +54,7 @@ class GWData(DenseDesignMatrix):
         super(GWData,self).__init__(X=X, y=y, view_converter=view_converter)
         
         assert not np.any(np.isnan(self.X))
-        
+
 def gendata():
     patch_shape = (32, 32)
     num_patches = [1e6, 5e5, 1e6, 1e6]
@@ -73,7 +73,7 @@ def gendata():
         trainbool = curstr == 'train' or curstr == 'tottrain'
         datasets[ii].apply_preprocessor(preprocessor=pipeline, can_fit=trainbool)
         # save
-        use_design_loc(curstr+'_design.npy')
+        datasets[ii].use_design_loc(curstr+'_design.npy')
         serial.save('/home/nico/datasets/Kaggle/GenderWriting/gw_preprocessed_'+curstr+'.pkl', datasets[ii])
 
 if __name__ == '__main__':
