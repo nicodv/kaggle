@@ -1,3 +1,5 @@
+#!/usr/bin/python
+
 import os
 import aifc
 import numpy as np
@@ -72,7 +74,7 @@ def standardize_signals(sigs):
 
 if __name__ == '__main__':
     for curstr in ('train','test'):
-        # read samples and store as numpy arrays
+        # read samples and store file numbers
         numbers, sigs = read_samples(eval(curstr+'dir'))
         
         # this is not cheating: samples are standardized based on their own data,
