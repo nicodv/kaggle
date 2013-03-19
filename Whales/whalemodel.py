@@ -22,7 +22,7 @@ from pylearn2.base import StackedBlocks
 from pylearn2.datasets.transformer_dataset import TransformerDataset
 from sklearn.metrics.metrics import auc_score
 
-DATA_DIR = '/home/nico/Code/datasets/Kaggle/Whales/'
+DATA_DIR = '/home/nico/datasets/Kaggle/Whales/'
 
 
 class Whales(DenseDesignMatrix):
@@ -324,7 +324,7 @@ if __name__ == '__main__':
     else:
         for ii, which_model in enumerate(submodels):
             output.append(get_output(which_model,testset[ii]))
-            np.savetxt('/home/nico/Code/datasets/Kaggle/Whales/model'+str(ii)+'.csv', output[ii], delimiter=",")
+            np.savetxt(DATA_DIR+'model'+str(ii)+'.csv', output[ii], delimiter=",")
     
 #==============================================================================
 #     HYBRID MODEL
@@ -364,7 +364,7 @@ if __name__ == '__main__':
     else:
         # Right Whale, Holy Grail!
         houtput = get_output(hybmodel, hybtestdata)
-        np.savetxt('/home/nico/Code/Kaggle/Whales/hybmodel.csv', houtput, delimiter=",")
+        np.savetxt(DATA_DIR+'hybmodel.csv', houtput, delimiter=",")
     
 #==============================================================================
 #     DEEP BELIEF NETWORK
