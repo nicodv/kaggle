@@ -6,7 +6,7 @@ from pylearn2.datasets import preprocessing
 from pylearn2.utils import serial
 import Image
 
-DATA_DIR = '/home/nico/datasets/Kaggle/Genderwrite/'
+DATA_DIR = '/home/nico/datasets/Kaggle/GenderWrite/'
 
 class GWData(DenseDesignMatrix):
     
