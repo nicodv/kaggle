@@ -324,7 +324,7 @@ if __name__ == '__main__':
     else:
         for ii, which_model in enumerate(submodels):
             output.append(get_output(which_model,testset[ii]))
-            np.savetxt('/home/nico/Code/Kaggle/Whales/model'+str(ii)+'.csv', output[ii], delimiter=",")
+            np.savetxt('/home/nico/Code/datasets/Kaggle/Whales/model'+str(ii)+'.csv', output[ii], delimiter=",")
     
 #==============================================================================
 #     HYBRID MODEL
