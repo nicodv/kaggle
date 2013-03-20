@@ -1,5 +1,5 @@
 !obj:pylearn2.train.Train {
-    dataset: !pkl:"/home/nico/datasets/Kaggle/GenderWriting/gw_preprocessed_train.pkl",
+    dataset: !pkl:"/home/nico/datasets/Kaggle/GenderWrite/gw_preprocessed_train.pkl",
     model: !obj:pylearn2.models.mlp.MLP {
         batch_size: 100,
         layers: [
@@ -55,7 +55,7 @@
     algorithm: !obj:pylearn2.training_algorithms.sgd.SGD {
         learning_rate: .05,
         init_momentum: .5,
-        monitoring_dataset: !pkl: "/home/nico/datasets/Kaggle/GenderWriting/gw_preprocessed_valid.pkl",
+        monitoring_dataset: !pkl: "/home/nico/datasets/Kaggle/GenderWrite/gw_preprocessed_valid.pkl",
         cost: !obj:pylearn2.costs.cost.MethodCost {
                 method: 'cost_from_X',
                 supervised: 1
