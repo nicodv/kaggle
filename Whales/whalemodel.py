@@ -80,8 +80,8 @@ def get_dataset(which_data, tot=False):
     else:
         
         print 'loading raw data...'
-        trainset = Whales(which_set="train", which_data=which_data, start=0, stop=20000)
-        validset = Whales(which_set="train", which_data=which_data, start=20000, stop=30000)
+        trainset = Whales(which_set="train", which_data=which_data, start=0, stop=26671)
+        validset = Whales(which_set="train", which_data=which_data, start=26671, stop=36671)
         tottrainset = Whales(which_set="train", which_data=which_data)
         testset = Whales(which_set="test", which_data=which_data)
         
@@ -96,7 +96,7 @@ def get_dataset(which_data, tot=False):
             
         # ZCA = zero-phase component analysis
         # very similar to PCA, but preserves the look of the original image better
-        #pipeline.items.append(preprocessing.ZCA())
+        pipeline.items.append(preprocessing.ZCA())
         
         trainset.apply_preprocessor(preprocessor=pipeline, can_fit=True)
         # this uses numpy format for storage instead of pickle, for memory reasons
@@ -155,15 +155,15 @@ def get_conv2D(dim_input):
     config = {
         'batch_size': 100,
         'input_space': Conv2DSpace(shape=dim_input[:2], num_channels=dim_input[2]),
-        'dropout_include_probs': [1, 1, 0.5, 1],
+        'dropout_include_probs': [0.5, 0.5, 0.5, 1],
         'dropout_input_include_prob': 0.8,
         'layers': [
-        ConvRectifiedLinear(layer_name='h0', output_channels=48, irange=.05, init_bias=0.,
-            kernel_shape=[7, 7], pool_shape=[4, 4], pool_stride=[3, 2]),
-        ConvRectifiedLinear(layer_name='h1', output_channels=48, irange=.05, init_bias=0.,
-            kernel_shape=[5, 5], pool_shape=[2, 2], pool_stride=[1, 1]),
-        ConvRectifiedLinear(layer_name='h2', output_channels=24, irange=.05, init_bias=0.,
-            kernel_shape=[3, 3], pool_shape=[2, 2], pool_stride=[2, 2]),
+        ConvRectifiedLinear(layer_name='h0', output_channels=24, irange=.05, init_bias=0.,
+            kernel_shape=[7, 7], pool_shape=[4, 4], pool_stride=[3, 2], W_lr_scale=0.64),
+        ConvRectifiedLinear(layer_name='h1', output_channels=48, irange=.025, init_bias=0.,
+            kernel_shape=[5, 5], pool_shape=[4, 2], pool_stride=[1, 1], W_lr_scale=0.25),
+        ConvRectifiedLinear(layer_name='h2', output_channels=24, irange=.025, init_bias=0.,
+            kernel_shape=[5, 5], pool_shape=[2, 2], pool_stride=[2, 2], W_lr_scale=0.25),
         Softmax(layer_name='y', n_classes=2, istdev=.025, W_lr_scale=0.25)
         ]
     }
@@ -173,15 +173,15 @@ def get_conv1D(dim_input):
     config = {
         'batch_size': 100,
         'input_space': Conv2DSpace(shape=dim_input[:2], num_channels=dim_input[2]),
-        'dropout_include_probs': [1, 0.5, 1],
+        'dropout_include_probs': [0.5, 0.5, 0.5, 1],
         'dropout_input_include_prob': 0.8,
         'layers': [
-        ConvRectifiedLinear(layer_name='h0', output_channels=48, irange=.05, init_bias=0.,
-            kernel_shape=[7, 1], pool_shape=[4, 1], pool_stride=[3, 1]),
-        ConvRectifiedLinear(layer_name='h1', output_channels=48, irange=.05, init_bias=0.,
-            kernel_shape=[5, 1], pool_shape=[2, 1], pool_stride=[1, 1]),
-        ConvRectifiedLinear(layer_name='h2', output_channels=24, irange=.05, init_bias=0.,
-            kernel_shape=[3, 1], pool_shape=[2, 1], pool_stride=[2, 1]),
+        ConvRectifiedLinear(layer_name='h0', output_channels=24, irange=.05, init_bias=0.,
+            kernel_shape=[7, 1], pool_shape=[4, 1], pool_stride=[3, 1], W_lr_scale=0.64),
+        ConvRectifiedLinear(layer_name='h1', output_channels=48, irange=.025, init_bias=0.,
+            kernel_shape=[5, 1], pool_shape=[4, 1], pool_stride=[1, 1], W_lr_scale=0.25),
+        ConvRectifiedLinear(layer_name='h2', output_channels=24, irange=.025, init_bias=0.,
+            kernel_shape=[5, 1], pool_shape=[2, 1], pool_stride=[2, 1], W_lr_scale=0.25),
         Softmax(layer_name='y', n_classes=2, istdev=.025, W_lr_scale=0.25)
         ]
     }
