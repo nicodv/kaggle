@@ -33,25 +33,6 @@ def get_conv2D(dim_input):
     }
     return MLP(**config)
 
-def get_conv1D(dim_input):
-    config = {
-        'batch_size': 100,
-        'input_space': Conv2DSpace(shape=dim_input[:2], num_channels=dim_input[2]),
-        'dropout_include_probs': [1, 1, 1, 0.5, 1],
-        'dropout_input_include_prob': 0.8,
-        'layers': [
-        ConvRectifiedLinear(layer_name='h0', output_channels=10, irange=.04, init_bias=0.,
-            kernel_shape=[11, 1], pool_shape=[8, 1], pool_stride=[4, 1], W_lr_scale=0.64, border_mode='full'),
-        ConvRectifiedLinear(layer_name='h1', output_channels=20, irange=.05, init_bias=0.,
-            kernel_shape=[7, 1], pool_shape=[4, 1], pool_stride=[2, 1], W_lr_scale=1.),
-        ConvRectifiedLinear(layer_name='h2', output_channels=40, irange=.05, init_bias=0.,
-            kernel_shape=[3, 1], pool_shape=[4, 1], pool_stride=[2, 1], W_lr_scale=1.),
-        RectifiedLinear(dim=100, layer_name='h3', istdev=.05, W_lr_scale=1.),
-        Softmax(layer_name='y', n_classes=2, istdev=.025, W_lr_scale=0.25)
-        ]
-    }
-    return MLP(**config)
-
 def get_trainer(model, trainset, validset):
     monitoring_batches = None if validset is None else 100
     train_algo = SGD(
