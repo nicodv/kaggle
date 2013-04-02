@@ -8,7 +8,7 @@ DATA_DIR = '/home/nico/datasets/Kaggle/GenderWrite/'
 
 class GWData(DenseDesignMatrix):
     
-    def __init__(self, which_set, start=None, stop=None):
+    def __init__(self, which_set, start=None, stop=None, axes=('b', 0, 1, 'c')):
         assert which_set in ['train','test']
         
         # size of patches extracted from JPG images
@@ -21,6 +21,10 @@ class GWData(DenseDesignMatrix):
         self.stdthreshold = 5
         # extra whitespace (if any) around writing that will be included
         self.wspace = 16
+        
+        def dimshuffle(b01c):
+            default = ('b', 0, 1, 'c')
+            return b01c.transpose(*[default.index(axis) for axis in axes])
         
         if start is None:
             if which_set == 'train':
@@ -66,7 +70,7 @@ class GWData(DenseDesignMatrix):
         
         view = list(self.patch_size)
         view.extend([1])
-        view_converter = DefaultViewConverter(view)
+        view_converter = DefaultViewConverter(view, axes)
         
         super(GWData,self).__init__(X=X, y=y, view_converter=view_converter)
         
