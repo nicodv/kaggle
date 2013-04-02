@@ -8,7 +8,7 @@ DATA_DIR = '/home/nico/datasets/Kaggle/GenderWrite/'
 
 class GWData(DenseDesignMatrix):
     
-    def __init__(self, which_set, start=None, stop=None, axes=('b', 0, 1, 'c')):
+    def __init__(self, which_set, start=None, stop=None, axes=('c', 0, 1, 'b')):
         assert which_set in ['train','test']
         
         # size of patches extracted from JPG images
