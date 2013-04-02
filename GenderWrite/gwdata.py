@@ -22,10 +22,6 @@ class GWData(DenseDesignMatrix):
         # extra whitespace (if any) around writing that will be included
         self.wspace = 16
         
-        def dimshuffle(b01c):
-            default = ('b', 0, 1, 'c')
-            return b01c.transpose(*[default.index(axis) for axis in axes])
-        
         if start is None:
             if which_set == 'train':
                 writers = range(1,283)
