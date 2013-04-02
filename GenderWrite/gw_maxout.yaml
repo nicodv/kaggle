@@ -1,5 +1,5 @@
 !obj:pylearn2.train.Train {
-    dataset: !pkl:"/home/nico/datasets/Kaggle/GenderWrite/gw_preprocessed_train.pkl",
+    dataset: !pkl: /home/nico/datasets/Kaggle/GenderWrite/gw_preprocessed_train.pkl,
     model: !obj:pylearn2.models.mlp.MLP {
         batch_size: 100,
         layers: [
@@ -39,12 +39,12 @@
                  !obj:pylearn2.models.mlp.Softmax {
                      max_col_norm: 1.9365,
                      layer_name: 'y',
-                     n_classes: 10,
+                     n_classes: 2,
                      irange: .005
                  }
                 ],
         input_space: !obj:pylearn2.space.Conv2DSpace {
-            shape: [36, 36],
+            shape: [30, 30],
             num_channels: 1,
             axes: ['c', 0, 1, 'b'],
         },
@@ -55,7 +55,8 @@
     algorithm: !obj:pylearn2.training_algorithms.sgd.SGD {
         learning_rate: .05,
         init_momentum: .5,
-        monitoring_dataset: !pkl: "/home/nico/datasets/Kaggle/GenderWrite/gw_preprocessed_valid.pkl",
+        monitoring_batches: 100,
+        monitoring_dataset: !pkl: /home/nico/datasets/Kaggle/GenderWrite/gw_preprocessed_valid.pkl,
         cost: !obj:pylearn2.costs.cost.MethodCost {
                 method: 'cost_from_X',
                 supervised: 1

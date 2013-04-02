@@ -44,7 +44,7 @@ def extract_audio_features(sigdata):
     fp = yl.FeaturePlan(sample_rate=SAMPLE_RATE)
     fp.addFeature('CDOD: ComplexDomainOnsetDetection FFTWindow=%s blockSize=%d stepSize=%d' % (window, block, step))
     fp.addFeature('LPC: LPC LPCNbCoeffs=4 blockSize=%d stepSize=%d' % (block, step))
-    fp.addFeature('MagnSpec: MagnitudeSpectrum FFTWindow=%s blockSize=%d stepSize=%d' % (window, block, step))
+    #fp.addFeature('MagnSpec: MagnitudeSpectrum FFTWindow=%s blockSize=%d stepSize=%d' % (window, block, step))
     fp.addFeature('MelSpec: MelSpectrum FFTWindow=%s MelMaxFreq=700. MelMinFreq=30. MelNbFilters=40 blockSize=%d stepSize=%d' % (window, block, step))
     fp.addFeature('MFCC: MFCC CepsIgnoreFirstCoeff=1 CepsNbCoeffs=12 FFTWindow=%s MelMaxFreq=700. MelMinFreq=30. MelNbFilters=40 blockSize=%d stepSize=%d' % (window, block, step))
     fp.addFeature('SF: SpectralFlux FFTWindow=%s FluxSupport=Increase blockSize=%d stepSize=%d' % (window, block, step))
@@ -61,10 +61,7 @@ def extract_audio_features(sigdata):
     for cnt in range(sigdata.shape[0]):
         signal = np.reshape(sigdata[cnt,:],[1,-1])
         feats.append(engine.processAudio(signal))
-        
-        # trim some uninteresting frequencies off spectrum
-        feats[cnt]['MagnSpec'] = feats[cnt]['MagnSpec'][:,2:36]
-        
+    
     return feats
 
 if __name__ == '__main__':
@@ -74,11 +71,12 @@ if __name__ == '__main__':
         
         if curstr == 'train':
             # add DCLDE 2013 Workshop Dataset data
-            numbers = [x+6671 for x in numbers]
-            extnumbers = range(1,6672)
+            numbers = [x+36671 for x in numbers]
+            extnumbers = range(1,36672)
             numbers.extend(extnumbers)
-            extradata = np.genfromtxt(datdir+'/extra/signals.csv', delimiter=',')
-            sigs = np.concatenate((sigs,extradata))
+            whales = np.genfromtxt(datdir+'/extra/signals.csv', delimiter=',')
+            nowhales = np.genfromtxt(datdir+'/extra/nosignals.csv', delimiter=',')
+            sigs = np.concatenate((sigs,whales,nowhales))
             assert len(numbers)==len(sigs)
         
         # make sure the data is sorted according to file number
@@ -87,20 +85,19 @@ if __name__ == '__main__':
         
         feats = extract_audio_features(sigs)
         
-        # split into 3 data sets
-        spectrum = np.array([x['MagnSpec'] for x in feats])
+        # split into 2 data sets
         melspectrum = np.array([x['MelSpec'] for x in feats])
         specfeat = np.array([np.concatenate((x['MFCC'],x['CDOD'],x['LPC'],x['SF'], \
                     x['SpecStats'],x['SpecSlope'],x['SpecVar']),axis=1) for x in feats])
         
-        np.save(os.path.join(datdir,curstr+'spectrum'), spectrum)
         np.save(os.path.join(datdir,curstr+'melspectrum'), melspectrum)
         np.save(os.path.join(datdir,curstr+'specfeat'), specfeat)
     
     targets = read_targets()
     # add DCLDE 2013 Workshop Dataset labels
-    extlabels = pd.Series(np.ones(6671))
-    targets = pd.concat([extlabels,targets])
+    whalelabels = pd.Series(np.ones(6671))
+    nowhalelabels = pd.Series(np.zeros(30000))
+    targets = pd.concat([whalelabels,nowhalelabels,targets])
     # convert to one-hot numpy array
     targets = np.array((targets,-targets+1)).T
     np.save(os.path.join(datdir,'targets'), targets)

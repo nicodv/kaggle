@@ -2,10 +2,7 @@
 
 import numpy as np
 from pylearn2.datasets.dense_design_matrix import DenseDesignMatrix, DefaultViewConverter
-from pylearn2.datasets import preprocessing
-from pylearn2.utils import serial
 from PIL import Image
-from collections import OrderedDict
 
 DATA_DIR = '/home/nico/datasets/Kaggle/GenderWrite/'
 
@@ -15,9 +12,9 @@ class GWData(DenseDesignMatrix):
         assert which_set in ['train','test']
         
         # size of patches extracted from JPG images
-        self.patch_size = (32,32)
+        self.patch_size = (30,30)
         # how many patches will be drawn for each of the writers
-        self.no_patches = 40
+        self.no_patches = 600
         # downsample data?
         self.scale_factor = 2
         # threshold for standard deviation above which there seems to be a signal
@@ -43,7 +40,7 @@ class GWData(DenseDesignMatrix):
             images = []
             for page in range(1,5):
                 # open and convert to grayscale
-                im = Image.open(DATA_DIR+wrstr+'_'+str(page)+'.jpg').convert('L')
+                im = Image.open(DATA_DIR+'jpgs/'+wrstr+'_'+str(page)+'.jpg').convert('L')
                 # resize
                 if self.scale_factor not in (None, 1, 1.):
                     im.resize((im.size[0]//self.scale_factor,im.size[1]//self.scale_factor), Image.ANTIALIAS)
@@ -114,26 +111,5 @@ class GWData(DenseDesignMatrix):
         
         return patches
 
-def gendata():
-
-    datasets = OrderedDict()
-    datasets['train'] = GWData(which_set = 'train', start=1, stop=10)
-    datasets['valid'] = GWData(which_set = 'train', start=1, stop=10)
-    datasets['test'] = GWData(which_set = 'test', start=1, stop=10)
-    datasets['tottrain'] = GWData(which_set = 'train', start=1, stop=10)
-    
-    # preprocess patches
-    pipeline = preprocessing.Pipeline()
-    pipeline.items.append(preprocessing.GlobalContrastNormalization())
-    pipeline.items.append(preprocessing.ZCA())
-    for dstr, dset in datasets.iteritems():
-        print dstr
-        # only fit on train data
-        trainbool = dstr == 'train' or dstr == 'tottrain'
-        dset.apply_preprocessor(preprocessor=pipeline, can_fit=trainbool)
-        # save
-        dset.use_design_loc(dstr+'_design.npy')
-        serial.save(DATA_DIR+'gw_preprocessed_'+dstr+'.pkl', dset)
-
 if __name__ == '__main__':
-    gendata()
+    pass
