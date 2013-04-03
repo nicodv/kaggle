@@ -46,13 +46,13 @@ def get_conv1D(dim_input):
             kernel_shape=[5, 1], pool_shape=[4, 1], pool_stride=[2, 1], W_lr_scale=1.),
         ConvRectifiedLinear(layer_name='h2', output_channels=40, irange=.05, init_bias=0.,
             kernel_shape=[3, 1], pool_shape=[4, 1], pool_stride=[2, 1], W_lr_scale=1.),
-        Sigmoid(dim=100, layer_name='h3', irange=.05, W_lr_scale=1., init_bias=0.),
+        Sigmoid(dim=50, layer_name='h3', irange=.05, W_lr_scale=1., init_bias=0.),
         Softmax(layer_name='y', n_classes=2, irange=.025, W_lr_scale=.25)
         ]
     }
     return MLP(**config)
 
-def get_trainer(model, trainset, validset):
+def get_trainer(model, trainset, validset, epochs=100):
     monitoring_batches = None if validset is None else 100
     train_algo = SGD(
         batch_size = 100,
@@ -61,13 +61,13 @@ def get_trainer(model, trainset, validset):
         monitoring_batches = monitoring_batches,
         monitoring_dataset = validset,
         cost = MethodCost(method='cost_from_X', supervised=1),
-        termination_criterion = EpochCounter(100),
+        termination_criterion = EpochCounter(epochs),
         update_callbacks = ExponentialDecay(decay_factor=1.0005, min_lr=0.001)
     )
     return Train(model=model, algorithm=train_algo, dataset=trainset, save_freq=0, save_path='epoch', \
             extensions=[MomentumAdjustor(final_momentum=0.95, start=0, saturate=40), ])
 
-def get_output(model, tdata, batch_size=100, squeeze=False):
+def get_output(model, tdata, batch_size=100):
     # get output submodel classifiers
     Xb = model.get_input_space().make_theano_batch()
     Yb = model.fprop(Xb)
@@ -135,4 +135,41 @@ if __name__ == '__main__':
         
         np.save(DATA_DIR+'convout_train', outtrainset)
         np.save(DATA_DIR+'convout_test', outtestset)
+    
+    
+    #########################
+    #   SPECTRAL FEATURES   #
+    #########################
+    trainset2,validset2,testset2 = Whales.whaledata.get_dataset('specfeat', tot=submission)
+    
+    # build and train classifiers for submodels
+    model2 = get_conv1D([67,1,24])
+    get_trainer(model2, trainset2, validset2, 50).main_loop()
+    
+    # validate model
+    if not submission:
+        output = get_output(model2,validset2)
+        # calculate AUC using sklearn
+        AUC = auc_score(validset2.get_targets()[:,0],output[:,0])
+        print AUC
+    else:
+        # construct data sets with model output
+        del model2.layers[-1]
+        del model2.dropout_include_probs[-1]
+        del model2.dropout_scales[-1]
+        outtrainset = get_output(model2,trainset2)
+        outtestset = get_output(model2,testset2)
+        # save test output as submission
+        np.savetxt(DATA_DIR+'model_conv1net.csv', outtestset[:,0], delimiter=",")
+        
+        # reshape
+        train_no = outtrainset.shape[0]
+        test_no = outtestset.shape[0]
+        outtrainset = np.swapaxes(np.reshape(outtrainset,[train_no,outtrainset.shape[1]]),0,1)
+        outtrainset = np.reshape(outtrainset,[train_no,-1])
+        outtestset = np.swapaxes(np.reshape(outtestset,[test_no,outtestset.shape[1]]),0,1)
+        outtestset = np.reshape(outtestset,[test_no,-1])
+        
+        np.save(DATA_DIR+'conv1out_train', outtrainset)
+        np.save(DATA_DIR+'conv1out_test', outtestset)
     
