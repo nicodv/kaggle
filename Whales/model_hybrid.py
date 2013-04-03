@@ -6,17 +6,18 @@ from sklearn import cross_validation, ensemble, metrics
 DATA_DIR = '/home/nico/datasets/Kaggle/Whales/'
 
 def load_data():
-    outtrain = np.load(DATA_DIR+'convout_train.npy')
-    outtest = np.load(DATA_DIR+'convout_test.npy')
+    c2train = np.load(DATA_DIR+'convout_train.npy')
+    c2test = np.load(DATA_DIR+'convout_test.npy')
+    c1train = np.load(DATA_DIR+'conv1out_train.npy')
+    c1test = np.load(DATA_DIR+'conv1out_test.npy')
     
     spectrain = np.load(DATA_DIR+'trainspecfeat.npy')
-    spectrain = np.concatenate((np.mean(spectrain, axis=1),np.std(spectrain, axis=1)), axis=1)
+    spectrain = np.concatenate((np.mean(spectrain, axis=1),np.std(spectrain, axis=1)),np.skew(spectrain, axis=1)), axis=1)
     spectest = np.load(DATA_DIR+'testspecfeat.npy')
-    spectest = np.concatenate((np.mean(spectest, axis=1),np.std(spectest, axis=1)), axis=1)
+    spectest = np.concatenate((np.mean(spectest, axis=1),np.std(spectest, axis=1)),np.skew(spectrain, axis=1)), axis=1)
     
-#    return np.concatenate((outtrain, spectrain), axis=1), \
-#            np.concatenate((outtest, spectest), axis=1)
-    return spectrain, spectest
+    return np.concatenate((c2train, c1train), axis=1), \
+            np.concatenate((c2test, c1test), axis=1)
 
 def train_model(traindata, targets):
     
@@ -49,5 +50,5 @@ if __name__ == '__main__':
     models = train_model(traindata, targets)
     
     output = models[0].predict_proba(testdata)
-    np.savetxt(DATA_DIR+'model_gbm.csv', output[:,0], delimiter=",")
+    np.savetxt(DATA_DIR+'model_hybrid.csv', output[:,0], delimiter=",")
     
