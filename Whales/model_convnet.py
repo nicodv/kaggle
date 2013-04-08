@@ -21,11 +21,11 @@ def get_conv2D(dim_input):
         'dropout_include_probs': [1, 1, 0.5, 1],
         'dropout_input_include_prob': 0.8,
         'layers': [
-        ConvRectifiedLinear(layer_name='h0', output_channels=40, irange=.04, init_bias=0.5, max_kernel_norm=1.9365,
+        ConvRectifiedLinear(layer_name='h0', output_channels=10, irange=.04, init_bias=0.5, max_kernel_norm=1.9365,
             kernel_shape=[7, 5], pool_shape=[4, 4], pool_stride=[3, 2], W_lr_scale=0.64),
         ConvRectifiedLinear(layer_name='h1', output_channels=20, irange=.05, init_bias=0., max_kernel_norm=1.9365,
             kernel_shape=[5, 5], pool_shape=[4, 4], pool_stride=[1, 1], W_lr_scale=1.),
-        ConvRectifiedLinear(layer_name='h2', output_channels=10, irange=.05, init_bias=0., max_kernel_norm=1.9365,
+        ConvRectifiedLinear(layer_name='h2', output_channels=40, irange=.05, init_bias=0., max_kernel_norm=1.9365,
             kernel_shape=[5, 3], pool_shape=[4, 4], pool_stride=[2, 2], W_lr_scale=1.),
         Softmax(layer_name='y', n_classes=2, irange=.025, W_lr_scale=0.25)
         ]
@@ -39,11 +39,11 @@ def get_conv1D(dim_input):
         'dropout_include_probs': [1, 1, 0.5, 1],
         'dropout_input_include_prob': 0.8,
         'layers': [
-        ConvRectifiedLinear(layer_name='h0', output_channels=40, irange=.04, init_bias=0.5, max_kernel_norm=1.9365,
+        ConvRectifiedLinear(layer_name='h0', output_channels=10, irange=.04, init_bias=0.5, max_kernel_norm=1.9365,
             kernel_shape=[7, 1], pool_shape=[4, 1], pool_stride=[3, 1], W_lr_scale=0.64),
         ConvRectifiedLinear(layer_name='h1', output_channels=20, irange=.05, init_bias=0., max_kernel_norm=1.9365,
             kernel_shape=[5, 1], pool_shape=[4, 1], pool_stride=[1, 1], W_lr_scale=1.),
-        ConvRectifiedLinear(layer_name='h2', output_channels=10, irange=.05, init_bias=0., max_kernel_norm=1.9365,
+        ConvRectifiedLinear(layer_name='h2', output_channels=40, irange=.05, init_bias=0., max_kernel_norm=1.9365,
             kernel_shape=[5, 1], pool_shape=[4, 1], pool_stride=[2, 1], W_lr_scale=1.),
         Softmax(layer_name='y', n_classes=2, irange=.025, W_lr_scale=0.25)
         ]
@@ -98,9 +98,9 @@ if __name__ == '__main__':
     
     submission = True
     
-    ########################
-    #   LOG MEL SPECTRUM   #
-    ########################
+    ####################
+    #   MEL SPECTRUM   #
+    ####################
     trainset,validset,testset = Whales.whaledata.get_dataset('melspectrum', tot=submission)
     
     # build and train classifiers for submodels
