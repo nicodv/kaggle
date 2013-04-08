@@ -62,22 +62,30 @@ train_fea = get_date_dataframe(train["saledate"])
 test_fea = get_date_dataframe(test["saledate"])
 
 for col in columns:
-    types = set(type(x) for x in train[col])
-    if str in types:
-        s = set(x for x in train[col])
-        str_to_categorical = defaultdict(lambda: -1, [(x[1], x[0]) for x in enumerate(s)])
-        train_fea = train_fea.join(pd.DataFrame({col: [str_to_categorical[x] for x in train[col]]}, index=train.index))
-        test_fea = test_fea.join(pd.DataFrame({col: [str_to_categorical[x] for x in test[col]]}, index=test.index))
-    else:
-        train_fea = train_fea.join(train[col])
-        test_fea = test_fea.join(test[col])
+    dropcols = ['MachineID','Turbocharged','Grouser_Tracks','Pad_Type','Backhoe_Mounting','Grouser_Type', \
+                'UsageBand','Blade_Type','Stick','auctioneerID','datasource','Forks','Pattern_Changer', \
+                'Differential_Type','Thumb','Hydraulics_Flow','Transmission','Steering_Controls', \
+                'Track_Type','Undercarriage_Pad_Width','Coupler_System','Travel_Controls', \
+                'Ripper','Coupler','Hydraulics','fiModelSeries','ProductGroupDesc', \
+                'Tip_Control','Scarifier','Blade_Extension','Drive_System','fiModelDesc','Stick_Length', \
+                'PrimaryLower','fiProductClassDesc','fiManufacturerDesc','Enclosure_Type','Pushblock']
+    if col not in dropcols:
+        types = set(type(x) for x in train[col])
+        if str in types:
+            s = set(x for x in train[col])
+            str_to_categorical = defaultdict(lambda: -1, [(x[1], x[0]) for x in enumerate(s)])
+            train_fea = train_fea.join(pd.DataFrame({col: [str_to_categorical[x] for x in train[col]]}, index=train.index))
+            test_fea = test_fea.join(pd.DataFrame({col: [str_to_categorical[x] for x in test[col]]}, index=test.index))
+        else:
+            train_fea = train_fea.join(train[col])
+            test_fea = test_fea.join(test[col])
 
 train_fea.MachineHoursCurrentMeter[train_fea.MachineHoursCurrentMeter.isnull()] = 0
 train_fea.auctioneerID[train_fea.auctioneerID.isnull()] = np.median(train_fea.auctioneerID)
 test_fea.MachineHoursCurrentMeter[test_fea.MachineHoursCurrentMeter.isnull()] = 0
 test_fea.auctioneerID[test_fea.auctioneerID.isnull()] = np.median(test_fea.auctioneerID)
 
-rf = RandomForestRegressor(n_estimators=50, n_jobs=-1, compute_importances = True)
+rf = RandomForestRegressor(n_estimators=100, n_jobs=-1, compute_importances = True)
 rf.fit(train_fea, train["SalePrice"])
 predictions = rf.predict(test_fea)
 imp = sorted(zip(train_fea.columns, rf.feature_importances_), key=lambda tup: tup[1], reverse=True)
