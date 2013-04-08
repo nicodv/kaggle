@@ -46,12 +46,16 @@ def extract_audio_features(sigdata):
     block = 120
     step = 60
     
+    # note: these are on Mel-scale
+    minfreq = 30
+    maxfreq = 600
+    
     fp = yl.FeaturePlan(sample_rate=SAMPLE_RATE)
     fp.addFeature('CDOD: ComplexDomainOnsetDetection FFTWindow=%s blockSize=%d stepSize=%d' % (window, block, step))
     fp.addFeature('LPC: LPC LPCNbCoeffs=4 blockSize=%d stepSize=%d' % (block, step))
     #fp.addFeature('MagnSpec: MagnitudeSpectrum FFTWindow=%s blockSize=%d stepSize=%d' % (window, block, step))
-    fp.addFeature('MelSpec: MelSpectrum FFTWindow=%s MelMaxFreq=550. MelMinFreq=50. MelNbFilters=40 blockSize=%d stepSize=%d' % (window, block, step))
-    fp.addFeature('MFCC: MFCC CepsIgnoreFirstCoeff=1 CepsNbCoeffs=12 FFTWindow=%s MelMaxFreq=550. MelMinFreq=50. MelNbFilters=40 blockSize=%d stepSize=%d' % (window, block, step))
+    fp.addFeature('MelSpec: MelSpectrum FFTWindow=%s MelMaxFreq=maxfreq MelMinFreq=minfreq. MelNbFilters=40 blockSize=%d stepSize=%d' % (window, block, step))
+    fp.addFeature('MFCC: MFCC CepsIgnoreFirstCoeff=1 CepsNbCoeffs=12 FFTWindow=%s MelMaxFreq=maxfreq MelMinFreq=minfreq MelNbFilters=40 blockSize=%d stepSize=%d' % (window, block, step))
     fp.addFeature('SF: SpectralFlux FFTWindow=%s FluxSupport=Increase blockSize=%d stepSize=%d' % (window, block, step))
     fp.addFeature('SpecStats: SpectralShapeStatistics FFTWindow=%s blockSize=%d stepSize=%d' % (window, block, step))
     fp.addFeature('SpecSlope: SpectralSlope FFTWindow=%s blockSize=%d stepSize=%d' % (window, block, step))
