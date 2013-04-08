@@ -60,7 +60,7 @@ test_fea.age[test_fea.age.isnull()] = 0
 train_fea = train_fea.drop(['YearMade'], axis=1)
 test_fea = test_fea.drop(['YearMade'], axis=1)
 
-rf = ensemble.RandomForestRegressor(n_estimators=50, n_jobs=-1, compute_importances = True)
+rf = ensemble.RandomForestRegressor(n_estimators=250, n_jobs=-1, compute_importances = True)
 
 # get cross-validation score
 cv = cross_validation.KFold(len(train["SalePrice"]), n_folds=5)
@@ -76,4 +76,4 @@ imp = sorted(zip(train_fea.columns, rf.feature_importances_), key=lambda tup: tu
 for fea in imp:
     print(fea)
 
-write_submission("random_forest_benchmark.csv", predictions)
+write_submission("submission.csv", predictions)

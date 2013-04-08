@@ -1,6 +1,10 @@
 #!/usr/bin/python
 
+from pylearn2.datasets import preprocessing
+from pylearn2.utils import serial
+from collections import OrderedDict
 import numpy as np
+import pandas as pd
 from pylearn2.datasets.dense_design_matrix import DenseDesignMatrix, DefaultViewConverter
 from PIL import Image
 
@@ -111,5 +115,35 @@ class GWData(DenseDesignMatrix):
         
         return patches
 
+def gendata():
+    datasets = OrderedDict()
+    datasets['train'] = GWData(which_set = 'train', start=1, stop=201)
+    datasets['valid'] = GWData(which_set = 'train', start=201, stop=283)
+    datasets['test'] = GWData(which_set = 'test')
+    datasets['tottrain'] = GWData(which_set = 'train')
+    
+    # preprocess patches
+    pipeline = preprocessing.Pipeline()
+    pipeline.items.append(preprocessing.GlobalContrastNormalization())
+    pipeline.items.append(preprocessing.ZCA())
+    for dstr, dset in datasets.iteritems():
+        print dstr
+        # only fit on train data
+        trainbool = dstr == 'train' or dstr == 'tottrain'
+        dset.apply_preprocessor(preprocessor=pipeline, can_fit=trainbool)
+        # save
+        dset.use_design_loc(DATA_DIR+dstr+'_design.npy')
+        serial.save(DATA_DIR+'gw_preprocessed_'+dstr+'.pkl', dset)
+
+def process_features():
+    feattrain = np.array(pd.read_csv(DATA_DIR+'train.csv', delimiter=','))
+    feattest = np.array(pd.read_csv(DATA_DIR+'test.csv', delimiter=','))
+    
+    # clean up
+    
+    np.save(DATA_DIR+'feat_train.npy', feattrain)
+    np.save(DATA_DIR+'feat_test.npy', feattest)
+
 if __name__ == '__main__':
-    pass
+    gendata()
+    process_features()

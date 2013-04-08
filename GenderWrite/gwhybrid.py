@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 import numpy as np
-import scipy
+import pandas as pd
 from sklearn import cross_validation, ensemble, metrics, linear_model
 
 DATA_DIR = '/home/nico/datasets/Kaggle/GenderWrite/'
@@ -9,8 +9,9 @@ DATA_DIR = '/home/nico/datasets/Kaggle/GenderWrite/'
 def load_data():
     mtrain = np.load(DATA_DIR+'maxout_train.npy')
     mtest = np.load(DATA_DIR+'maxout_test.npy')
-    feattrain = np.load(DATA_DIR+'trainfeat.npy')
-    feattest = np.load(DATA_DIR+'testfeat.npy')
+
+    feattrain = np.load(DATA_DIR+'feat_train.npy')
+    feattest = np.load(DATA_DIR+'feat_test.npy')
     
     traindata = np.concatenate((mtrain, feattrain), axis=1)
     testdata = np.concatenate((mtest, feattest), axis=1)
