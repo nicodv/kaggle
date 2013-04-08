@@ -1,5 +1,9 @@
 #!/usr/bin/python
 
+'''
+Data class in pylearn2 format
+'''
+
 import os
 import numpy as np
 
@@ -18,9 +22,11 @@ class Whales(DenseDesignMatrix):
         
         X = np.load(os.path.join(DATA_DIR,which_set+which_data+'.npy'))
         X = np.cast['float32'](X)
+        # X needs to be 1D, shape info is stored in view_converter
         X = np.reshape(X,(X.shape[0], np.prod(X.shape[1:])))
         
         if which_set == 'test':
+            # dummy targets
             y = np.zeros((X.shape[0],2))
         else:
             y = np.load(os.path.join(DATA_DIR,'targets.npy'))
@@ -34,8 +40,10 @@ class Whales(DenseDesignMatrix):
             assert X.shape[0] == y.shape[0]
             
         if which_data == 'melspectrum':
+            # 2D data with 1 channel
             view_converter = DefaultViewConverter((67,40,1))
         elif which_data == 'specfeat':
+            # 24 channels with 1D data
             view_converter = DefaultViewConverter((67,1,24))
             
         super(Whales,self).__init__(X=X, y=y, view_converter=view_converter)
@@ -83,6 +91,7 @@ def get_dataset(which_data, tot=False):
         trainset.apply_preprocessor(preprocessor=pipeline, can_fit=True)
         # this uses numpy format for storage instead of pickle, for memory reasons
         trainset.use_design_loc(DATA_DIR+'train_'+which_data+'_design.npy')
+        # note the can_fit=False: no sharing between train and test data
         validset.apply_preprocessor(preprocessor=pipeline, can_fit=False)
         validset.use_design_loc(DATA_DIR+'valid_'+which_data+'_design.npy')
         tottrainset.apply_preprocessor(preprocessor=pipeline, can_fit=True)
