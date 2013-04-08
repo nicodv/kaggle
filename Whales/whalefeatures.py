@@ -14,6 +14,9 @@ datdir   ='/home/nico/datasets/Kaggle/Whales'
 SAMPLE_RATE = 2000
 SAMPLE_LENGTH = 2
 
+# add training examples from DCLDE 2013 Workshop Dataset?
+DCLDE_DATA = True
+
 def read_samples(dir):
     allSigs = np.zeros( (len(os.listdir(dir)),SAMPLE_LENGTH*SAMPLE_RATE) )
     filenumbers = []
@@ -37,6 +40,8 @@ def read_targets():
     return targets.label
 
 def extract_audio_features(sigdata):
+    '''Extracts a bunch of audio features using YAAFE
+    '''
     window = 'Hanning'
     block = 120
     step = 60
@@ -75,38 +80,39 @@ def _remove_bias(data, window=50):
 
 if __name__ == '__main__':
     
-    extra_data = True
-    
     for curstr in ('train','test'):
         # read samples and store file numbers
         numbers, sigs = read_samples(eval(curstr+'dir'))
         
-        # remove low-frequency signals with a MA
-        sigs = _remove_bias(sigs)
-        #sigs = sigs - np.mean(sigs, axis=1, keepdims=True)
+        # original data is pretty clean, but still remove mean
+        sigs = sigs - np.mean(sigs, axis=1, keepdims=True)
         
-        if extra_data and curstr == 'train':
+        if DCLDE_DATA and curstr == 'train':
             # add DCLDE 2013 Workshop Dataset data
             numbers = [x+36671 for x in numbers]
             extnumbers = range(1,36672)
             numbers.extend(extnumbers)
             whales = np.genfromtxt(datdir+'/extra/signals.csv', delimiter=',')
             nowhales = np.genfromtxt(datdir+'/extra/nosignals.csv', delimiter=',')
-            whales = _remove_bias(whales)
-            nowhales = _remove_bias(nowhales)
+            # DCLDE data has low-frequency signals in the data,
+            # remove by subtracting simple moving average
+            whales = _remove_bias(whales, window=50)
+            nowhales = _remove_bias(nowhales, window=50)
             sigs = np.concatenate((sigs,whales,nowhales))
             assert len(numbers)==len(sigs)
         
         # make sure the data is sorted according to file number
+        # (necessary, since sorting is alphanumeric: 1, 10, 100, 2, etc.)
         numbers = np.array(numbers)
         sigs = sigs[numbers.argsort()]
         
-        # normalize all signals using RMS
+        # standardize all signals
         sigs = sigs / np.std(sigs, axis=1, keepdims=True)
         
+        # now we can extract features
         feats = extract_audio_features(sigs)
         
-        # split into 2 data sets
+        # split into 2 data sets with 2D and 1D data, respectively
         melspectrum = np.array([x['MelSpec'] for x in feats])
         specfeat = np.array([np.concatenate((x['MFCC'],x['CDOD'],x['LPC'],x['SF'], \
                     x['SpecStats'],x['SpecSlope'],x['SpecVar']),axis=1) for x in feats])
@@ -116,7 +122,7 @@ if __name__ == '__main__':
     
     targets = read_targets()
     
-    if extra_data:
+    if DCLDE_DATA:
         # add DCLDE 2013 Workshop Dataset labels
         whalelabels = pd.Series(np.ones(6671))
         nowhalelabels = pd.Series(np.zeros(30000))
