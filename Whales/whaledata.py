@@ -104,7 +104,7 @@ def get_dataset(which_data, tot=False):
         serial.save(DATA_DIR+'test'+which_data+'_preprocessed.pkl', testset)
         
     if tot:
-        return tottrainset, None, testset
+        return tottrainset, validset, testset
     else:
         return trainset, validset, testset
 
