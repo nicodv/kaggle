@@ -161,7 +161,16 @@ def process_features():
         df = fit_transform(pca, np.array(df))
         
         np.save(DATA_DIR+'feat_'+curstr+'.npy', np.array(df))
+    
+
+def process_targets():
+    targets = np.genfromtxt(DATA_DIR+'train_answers.csv', delimiter=',', filling_values=0, skip_header=1)
+    targets_pp = np.repeat(targets, 4)
+    np.save(DATA_DIR+'targets_per_page.npy', targets_pp)
+    np.save(DATA_DIR+'targets.npy', targets)
+    
 
 if __name__ == '__main__':
     generate_patches()
     process_features()
+    process_targets()
