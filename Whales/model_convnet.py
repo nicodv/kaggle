@@ -15,7 +15,6 @@ from sklearn.metrics.metrics import auc_score
 DATA_DIR = '/home/nico/datasets/Kaggle/Whales/'
 
 def get_conv2D(dim_input):
-def get_conv2D(dim_input):
     config = {
         'batch_size': 200,
         'input_space': Conv2DSpace(shape=dim_input[:2], num_channels=dim_input[2]),
