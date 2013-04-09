@@ -136,13 +136,23 @@ def gendata():
         serial.save(DATA_DIR+'gw_preprocessed_'+dstr+'.pkl', dset)
 
 def process_features():
-    feattrain = np.array(pd.read_csv(DATA_DIR+'train.csv', delimiter=','))
-    feattest = np.array(pd.read_csv(DATA_DIR+'test.csv', delimiter=','))
-    
-    # clean up
-    
-    np.save(DATA_DIR+'feat_train.npy', feattrain)
-    np.save(DATA_DIR+'feat_test.npy', feattest)
+    for curstr in ('train','test'):
+        feats = pd.read_csv(DATA_DIR+curstr+'.csv', delimiter=',')
+        
+        # drop page number
+        
+        # remove features that have zero standard deviation
+        
+        # english = 1, arabic = 2
+        
+        # cut off some extreme values
+        
+        # standardize data
+        
+        # do a PCA and keep largest components
+        
+        
+        np.save(DATA_DIR+'feat_'+curstr+'.npy', np.array(feats))
 
 if __name__ == '__main__':
     gendata()
