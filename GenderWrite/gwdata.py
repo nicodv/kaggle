@@ -63,7 +63,7 @@ class GWData(DenseDesignMatrix):
         if which_set == 'test':
             y = np.zeros((X.shape[0],2))
         else:
-            y = np.save(DATA_DIR+'targets_per_page.npy')
+            y = np.load(DATA_DIR+'targets_per_page.npy')
         
         view = list(self.patch_size)
         view.extend([1])
@@ -153,9 +153,11 @@ def process_features():
         # remove features that have zero standard deviation
         df = df.iloc[:,df.std(axis=0) > 0]
         
-        # do a PCA and keep largest components
-        pca = decomposition.PCA(n_components=120, copy=False, whiten=True)
-        #pca = decomposition.KernelPCA(n_components=120, kernel='linear')
+        if curstr=='train':
+            # do a PCA and keep largest components
+            pca = decomposition.PCA(n_components=120, copy=False, whiten=True)
+            #pca = decomposition.KernelPCA(n_components=120, kernel='linear')
+        
         df = pca.fit_transform(np.array(df))
         
         np.save(DATA_DIR+'feat_'+curstr+'.npy', df)
