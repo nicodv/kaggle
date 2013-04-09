@@ -7,7 +7,18 @@ DATA_DIR = '/home/nico/Code/kaggle/GenderWrite/'
 
 # load configuration file and train model
 train_obj = serial.load_train_file(DATA_DIR+'gwmaxout.yaml'
+
+# layer-by-layer training
+layers = train_obj.model.layers
+# first remove all but first and last layers and train first layer
+for ii in range(len(layers)-2):
+    train_obj.model.layers.pop(1)
 train_obj.main_loop()
+
+# now add layers and re-train
+for ii in range(len(layers)-2):
+    train_obj.model.layers.insert(1+ii,layers[1+ii])
+    train_obj.main_loop()
 
 # generate model output
 def get_output(model, tdata, layerindex=-1, batch_size=100):
