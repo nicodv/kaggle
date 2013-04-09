@@ -8,6 +8,7 @@ train_obj = serial.load_train_file(DATA_DIR+'gw_maxout.yaml'
 train_obj.main_loop()
 
 # generate model output
+DATA_DIR+'gw_preprocessed_test.pkl'
 
 # reshape model output so that shape[0] = no. of pages
 
