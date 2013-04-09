@@ -165,6 +165,9 @@ def process_features():
 
 def process_targets():
     targets = np.genfromtxt(DATA_DIR+'train_answers.csv', delimiter=',', filling_values=0, skip_header=1)
+    # make one-hot vector
+    targets = np.array((targets, -targets+1)).T
+    # targets per page, for combination model
     targets_pp = np.repeat(targets, 4)
     np.save(DATA_DIR+'targets_per_page.npy', targets_pp)
     np.save(DATA_DIR+'targets.npy', targets)
