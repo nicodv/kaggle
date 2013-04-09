@@ -63,11 +63,7 @@ class GWData(DenseDesignMatrix):
         if which_set == 'test':
             y = np.zeros((X.shape[0],2))
         else:
-            y = np.genfromtxt(DATA_DIR+'train_answers.csv', delimiter=',', filling_values=0, skip_header=1)
-        # shape y like X, so repeat y[x] no_patches times
-        y = np.repeat(y, self.no_patches)
-        # make one-hot vector
-        y = np.array((y, -y+1)).T
+            y = np.save(DATA_DIR+'targets_per_page.npy')
         
         view = list(self.patch_size)
         view.extend([1])
