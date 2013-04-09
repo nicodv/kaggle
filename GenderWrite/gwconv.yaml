@@ -1,0 +1,67 @@
+!obj:pylearn2.train.Train {
+    dataset: !pkl: /home/nico/datasets/Kaggle/GenderWrite/gw_preprocessed_train.pkl,
+    model: !obj:pylearn2.models.mlp.MLP {
+        batch_size: 100,
+        layers: [
+            !obj:pylearn2.models.mlp.ConvRectifiedLinear {
+                layer_name: 'h0',
+                output_channels: 48,
+                irange: .05,
+                kernel_shape: [5, 5],
+                pool_shape: [4, 4],
+                pool_stride: [2, 2],
+                max_kernel_norm: 0.9
+            },
+            !obj:pylearn2.models.mlp.ConvRectifiedLinear {
+                layer_name: 'h1',
+                output_channels: 64,
+                irange: .05,
+                kernel_shape: [5, 5],
+                pool_shape: [4, 4],
+                pool_stride: [2, 2],
+                max_kernel_norm: 1.9365
+            },
+            !obj:pylearn2.models.mlp.Softmax {
+                max_col_norm: 1.9365,
+                layer_name: 'y',
+                n_classes: 2,
+                istdev: .05,
+            }
+            ],
+        input_space: !obj:pylearn2.space.Conv2DSpace {
+            shape: [30, 30],
+            num_channels: 1,
+            axes: ['c', 0, 1, 'b'],
+        },
+    },
+    algorithm: !obj:pylearn2.training_algorithms.sgd.SGD {
+        learning_rate: .05,
+        init_momentum: .5,
+        monitoring_batches: 100,
+        monitoring_dataset: !pkl: /home/nico/datasets/Kaggle/GenderWrite/gw_preprocessed_valid.pkl,
+        cost: !obj:pylearn2.costs.mlp.dropout.Dropout {
+            input_include_probs: { 'h0' : .8 },
+            input_scales: { 'h0': 1. }
+        },
+        cost: !obj:pylearn2.costs.cost.MethodCost {
+                method: 'cost_from_X',
+                supervised: 1
+        },
+        termination_criterion: !obj:pylearn2.termination_criteria.MonitorBased {
+            channel_name: 'y_misclass',
+            prop_decrease: 0.,
+            N: 100
+        },
+        update_callbacks: !obj:pylearn2.training_algorithms.sgd.ExponentialDecay {
+            decay_factor: 1.00004,
+            min_lr: .000001
+        }
+    },
+    extensions: [
+        !obj:pylearn2.training_algorithms.sgd.MomentumAdjustor {
+            start: 1,
+            saturate: 50,
+            final_momentum: .9
+        },
+    ]
+}

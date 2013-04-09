@@ -48,7 +48,7 @@ class GWData(DenseDesignMatrix):
                 im = Image.open(DATA_DIR+'jpgs/'+wrstr+'_'+str(page)+'.jpg').convert('L')
                 # resize
                 if self.scale_factor not in (None, 1, 1.):
-                    im.resize((im.size[0]//self.scale_factor,im.size[1]//self.scale_factor), Image.ANTIALIAS)
+                    im = im.resize((im.size[0]//self.scale_factor,im.size[1]//self.scale_factor), Image.ANTIALIAS)
                 # from here on, work with 2D numpy array
                 im = np.squeeze(np.array(im, dtype=np.uint8))
                 # crop
@@ -132,6 +132,7 @@ def generate_patches():
         dset.use_design_loc(DATA_DIR+dstr+'_design.npy')
         serial.save(DATA_DIR+'gw_preprocessed_'+dstr+'.pkl', dset)
 
+
 def process_features():
     for curstr in ('train','test'):
         df = pd.read_csv(DATA_DIR+curstr+'.csv', delimiter=',')
@@ -140,31 +141,32 @@ def process_features():
         df.language[df.language=='English'] = -1
         df.language[df.language=='Arabic'] = 1
         
+        # delete unused columns
+        df = df.drop(['same_text','writer'],axis=1)
+        
         # fill missings with median per page
-        df = df.groupby(['page'])
+        df = df.groupby('page_id')
         f = lambda x: x.fillna(x.median())
         df = df.transform(f)
-        
-        # delete unused columns
-        df = df.drop(['page'],axis=1)
+        df = df.reset_index()
         
         # remove features that have zero standard deviation
-        df = df.iloc[:,df.std(axis=1) > 0]
+        df = df.iloc[:,df.std(axis=0) > 0]
         
         # do a PCA and keep largest components
-        pca = decomposition.PCA(n_components=80, copy=False, whiten=True)
-        #pca = decomposition.KernelPCA(n_components=80, kernel='linear')
-        df = fit_transform(pca, np.array(df))
+        pca = decomposition.PCA(n_components=120, copy=False, whiten=True)
+        #pca = decomposition.KernelPCA(n_components=120, kernel='linear')
+        df = pca.fit_transform(np.array(df))
         
-        np.save(DATA_DIR+'feat_'+curstr+'.npy', np.array(df))
+        np.save(DATA_DIR+'feat_'+curstr+'.npy', df)
     
 
 def process_targets():
-    targets = np.genfromtxt(DATA_DIR+'train_answers.csv', delimiter=',', filling_values=0, skip_header=1)
+    targets = np.genfromtxt(DATA_DIR+'train_answers.csv', delimiter=',', filling_values=0, skip_header=1)[:,1]
     # make one-hot vector
     targets = np.array((targets, -targets+1)).T
     # targets per page, for combination model
-    targets_pp = np.repeat(targets, 4)
+    targets_pp = np.repeat(targets,[4]*targets.shape[0], axis=0)
     np.save(DATA_DIR+'targets_per_page.npy', targets_pp)
     np.save(DATA_DIR+'targets.npy', targets)
     

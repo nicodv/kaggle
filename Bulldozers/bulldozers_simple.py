@@ -60,7 +60,8 @@ test_fea.age[test_fea.age.isnull()] = 0
 train_fea = train_fea.drop(['YearMade'], axis=1)
 test_fea = test_fea.drop(['YearMade'], axis=1)
 
-rf = ensemble.RandomForestRegressor(n_estimators=250, n_jobs=-1, compute_importances = True)
+rf = ensemble.RandomForestRegressor(n_estimators=500, n_jobs=-1, max_features='log2', \
+    compute_importances=True, oob_score=False, min_samples_split=20)
 
 # get cross-validation score
 cv = cross_validation.KFold(len(train["SalePrice"]), n_folds=5)
