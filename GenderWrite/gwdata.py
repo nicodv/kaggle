@@ -116,7 +116,7 @@ class GWData(DenseDesignMatrix):
         
         return patches
 
-def gendata():
+def generate_patches():
     datasets = OrderedDict()
     datasets['train'] = GWData(which_set = 'train', start=1, stop=201)
     datasets['valid'] = GWData(which_set = 'train', start=201, stop=283)
@@ -163,5 +163,5 @@ def process_features():
         np.save(DATA_DIR+'feat_'+curstr+'.npy', np.array(df))
 
 if __name__ == '__main__':
-    gendata()
+    generate_patches()
     process_features()
