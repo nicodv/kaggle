@@ -4,7 +4,7 @@ from pylearn2.utils import serial
 DATA_DIR = '/home/nico/Code/kaggle/GenderWrite/'
 
 # load configuration file and train model
-train_obj = serial.load_train_file(DATA_DIR+'gw_maxout.yaml'
+train_obj = serial.load_train_file(DATA_DIR+'gwmaxout.yaml'
 train_obj.main_loop()
 
 # generate model output
