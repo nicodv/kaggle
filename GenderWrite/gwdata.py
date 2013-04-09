@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from pylearn2.datasets.dense_design_matrix import DenseDesignMatrix, DefaultViewConverter
 from PIL import Image
+from sklearn import decomposition
 
 DATA_DIR = '/home/nico/datasets/Kaggle/GenderWrite/'
 
@@ -137,22 +138,29 @@ def gendata():
 
 def process_features():
     for curstr in ('train','test'):
-        feats = pd.read_csv(DATA_DIR+curstr+'.csv', delimiter=',')
+        df = pd.read_csv(DATA_DIR+curstr+'.csv', delimiter=',')
         
-        # drop page number
+        # convert to numeric
+        df.language[df.language=='English'] = -1
+        df.language[df.language=='Arabic'] = 1
+        
+        # fill missings with median per page
+        df = df.groupby(['page'])
+        f = lambda x: x.fillna(x.median())
+        df = df.transform(f)
+        
+        # delete unused columns
+        df = df.drop(['page'],axis=1)
         
         # remove features that have zero standard deviation
-        
-        # english = 1, arabic = 2
-        
-        # cut off some extreme values
-        
-        # standardize data
+        df = df.iloc[:,df.std(axis=1) > 0]
         
         # do a PCA and keep largest components
+        pca = decomposition.PCA(n_components=80, copy=False, whiten=True)
+        #pca = decomposition.KernelPCA(n_components=80, kernel='linear')
+        df = fit_transform(pca, np.array(df))
         
-        
-        np.save(DATA_DIR+'feat_'+curstr+'.npy', np.array(feats))
+        np.save(DATA_DIR+'feat_'+curstr+'.npy', np.array(df))
 
 if __name__ == '__main__':
     gendata()
