@@ -177,6 +177,9 @@ def process_features():
         # standardize the data
         df = (df - df.mean(axis=0)) / df.std(axis=0)
         
+        # generate some new examples by combining examples from the same writer
+        
+        
         if curstr=='train':
             # do a PCA and keep largest components
             pca = decomposition.PCA(n_components=120, copy=False)
