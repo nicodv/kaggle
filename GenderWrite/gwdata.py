@@ -157,8 +157,11 @@ def process_features():
             # do a PCA and keep largest components
             pca = decomposition.PCA(n_components=120, copy=False, whiten=True)
             #pca = decomposition.KernelPCA(n_components=120, kernel='linear')
+            # only fit on train data
+            df = pca.fit(np.array(df))
         
-        df = pca.fit_transform(np.array(df))
+        # apply pca to both train and test data
+        df = pca.transform(np.array(df))
         
         np.save(DATA_DIR+'feat_'+curstr+'.npy', df)
     
