@@ -151,6 +151,7 @@ def process_features():
             col = winsorize(col)
         
         # delete unused columns
+        writers = df['writer'] # save this one for later
         df = df.drop(['writer','language','page_id','same_text'],axis=1)
         
         # remove features that have zero standard deviation
@@ -174,13 +175,19 @@ def process_features():
         # ... and drop the previous individual features
         df = df.iloc[:,(df==df.median(axis=0)).sum(0) < 0.5*len(df.rows)]
         
+        if curstr == 'train':
+            # generate some new examples by combining examples from the same writer
+            for ii, exA in enumerate(df.iterrows()):
+                for jj, exB in enumerate(df.iterrows()):
+                    if exA != exB and writers[ii] == writers[jj]:
+                        rand = np.random.random_sample()
+                        newex = rand*exA + (1-rand)*exB
+                        df = df.append(newex)
+        
         # standardize the data
         df = (df - df.mean(axis=0)) / df.std(axis=0)
         
-        # generate some new examples by combining examples from the same writer
-        
-        
-        if curstr=='train':
+        if curstr == 'train':
             # do a PCA and keep largest components
             pca = decomposition.PCA(n_components=120, copy=False)
             #pca = decomposition.KernelPCA(n_components=120, kernel='linear')
