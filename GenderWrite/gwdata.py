@@ -174,6 +174,6 @@ def process_targets():
     
 
 if __name__ == '__main__':
+    process_targets()
     generate_patches()
     process_features()
-    process_targets()
