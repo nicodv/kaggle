@@ -137,25 +137,49 @@ def process_features():
     for curstr in ('train','test'):
         df = pd.read_csv(DATA_DIR+curstr+'.csv', delimiter=',')
         
-        # convert to numeric
-        df.language[df.language=='English'] = -1
-        df.language[df.language=='Arabic'] = 1
+        def fill_na_by_group(col, group, stat='median'):
+            gbcol = col.groupby(group)
+            eval('f = lambda x: x.fillna(x.' + stat + '())')
+            col = gbcol.transform(f)
+        
+        def winsorize(col, stat='std', factor=3):
+            eval('cutoff = factor * np.' + stat + '(col)')
+            col[np.abs(col) > cutoff] = cutoff
+        
+        for col in df:
+            col = fill_na_by_group(col,group='page_id')
+            col = winsorize(col)
         
         # delete unused columns
-        df = df.drop(['same_text','writer'],axis=1)
-        
-        # fill missings with median per page
-        df = df.groupby('page_id')
-        f = lambda x: x.fillna(x.median())
-        df = df.transform(f)
-        df = df.reset_index()
+        df = df.drop(['writer','language','page_id','same_text'],axis=1)
         
         # remove features that have zero standard deviation
         df = df.iloc[:,df.std(axis=0) > 0]
         
+        # combine features that have more than 50% of a single value into a single feature
+        # by standardizing them and then taking the mean
+        # (there might be something useful here, and hopefully they are complementary)
+        sf = df.iloc[:,(df==df.median(axis=0)).sum(0) > 0.5*len(df.rows)]
+        for col in sf:
+            mask = col==col.median()
+            colmean = np.mean(col[~mask])
+            colstd = np.std(col[~mask])
+            # set the median value to the mean of non-median values
+            col[mask] = colmean
+            # standardize
+            col = (col - colmean) / colstd
+        
+        # now add this aggregate feature to the feature dataframe
+        df['sf'] = sf.mean(axis=1)
+        # ... and drop the previous individual features
+        df = df.iloc[:,(df==df.median(axis=0)).sum(0) < 0.5*len(df.rows)]
+        
+        # standardize the data
+        df = (df - df.mean(axis=0)) / df.std(axis=0)
+        
         if curstr=='train':
             # do a PCA and keep largest components
-            pca = decomposition.PCA(n_components=120, copy=False, whiten=True)
+            pca = decomposition.PCA(n_components=120, copy=False)
             #pca = decomposition.KernelPCA(n_components=120, kernel='linear')
             # only fit on train data
             df = pca.fit(np.array(df))
