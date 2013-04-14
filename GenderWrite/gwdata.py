@@ -8,8 +8,11 @@ import pandas as pd
 from pylearn2.datasets.dense_design_matrix import DenseDesignMatrix, DefaultViewConverter
 from PIL import Image
 from sklearn import decomposition
+import GenderWrite.gwdata
 
 DATA_DIR = '/home/nico/datasets/Kaggle/GenderWrite/'
+
+EXTRA_EX = 8
 
 class GWData(DenseDesignMatrix):
     
@@ -114,10 +117,10 @@ class GWData(DenseDesignMatrix):
 
 def generate_patches():
     datasets = OrderedDict()
-    datasets['train'] = GWData(which_set = 'train', start=1, stop=201)
-    datasets['valid'] = GWData(which_set = 'train', start=201, stop=283)
-    datasets['test'] = GWData(which_set = 'test')
-    datasets['tottrain'] = GWData(which_set = 'train')
+    datasets['train'] = GenderWrite.gwdata.GWData(which_set = 'train', start=1, stop=201)
+    datasets['valid'] = GenderWrite.gwdata.GWData(which_set = 'train', start=201, stop=283)
+    datasets['test'] = GenderWrite.gwdata.GWData(which_set = 'test')
+    datasets['tottrain'] = GenderWrite.gwdata.GWData(which_set = 'train')
     
     # preprocess patches
     pipeline = preprocessing.Pipeline()
@@ -135,69 +138,109 @@ def generate_patches():
 
 def process_features():
     for curstr in ('train','test'):
+        
+        can_fit = curstr == 'train'
+        
         df = pd.read_csv(DATA_DIR+curstr+'.csv', delimiter=',')
-        
-        def fill_na_by_group(col, group, stat='median'):
-            gbcol = col.groupby(group)
-            eval('f = lambda x: x.fillna(x.' + stat + '())')
-            col = gbcol.transform(f)
-        
-        def winsorize(col, stat='std', factor=3):
-            eval('cutoff = factor * np.' + stat + '(col)')
-            col[np.abs(col) > cutoff] = cutoff
-        
-        for col in df:
-            col = fill_na_by_group(col,group='page_id')
-            col = winsorize(col)
         
         # delete unused columns
         writers = df['writer'] # save this one for later
-        df = df.drop(['writer','language','page_id','same_text'],axis=1)
+        langs = df['language']
+        df = df.drop(['writer','language','same_text'],axis=1)
+        
+        def winsorize(col, stat='std', factor=3):
+            cutoff = eval('factor * np.' + stat + '(col)')
+            colmean = np.mean(col)
+            col[np.abs(col - colmean) > cutoff] = colmean + np.sign(col - colmean)*cutoff
+            return col
+        
+        for colname in df.columns:
+            gbcol = df.groupby(['page_id'])[colname]
+            f = eval('lambda x: x.fillna(x.median())')
+            col = gbcol.transform(f)
+            
+            df[colname] = winsorize(df[colname])
+        
+        df = df.drop(['page_id'],axis=1)
         
         # remove features that have zero standard deviation
-        df = df.iloc[:,df.std(axis=0) > 0]
+        if can_fit:
+            delmask = df.std(axis=0) > 0
         
-        # combine features that have more than 50% of a single value into a single feature
-        # by standardizing them and then taking the mean
-        # (there might be something useful here, and hopefully they are complementary)
-        sf = df.iloc[:,(df==df.median(axis=0)).sum(0) > 0.5*len(df.rows)]
-        for col in sf:
-            mask = col==col.median()
-            colmean = np.mean(col[~mask])
-            colstd = np.std(col[~mask])
+        df = df.iloc[:,delmask]
+        
+        # combine features that have a lot of a single value into a single
+        # (hopefully useful) feature by standardizing them and then taking the mean of all
+        # (take into account when they have only a few unique values, might be useful still)
+        if can_fit:
+            sfcols = []
+            for col in df.columns:
+                if ((df[col] == df[col].median()).sum() > 0.6*len(df[col]) and np.unique(df[col]).count() >= 8) or \
+                    ((df[col] == df[col].median()).sum() > 0.75*len(df[col]) and np.unique(df[col]).count() >= 4) or \
+                    (df[col] == df[col].median()).sum() > 0.9*len(df[col]):
+                    sfcols.append(col)
+        
+        sft = []
+        for col in sfcols:
+            mask = df[col]==df[col].median()
+            colmean = np.mean(df[col][~mask])
+            colstd = np.std(df[col][~mask])
             # set the median value to the mean of non-median values
-            col[mask] = colmean
-            # standardize
-            col = (col - colmean) / colstd
+            sf = df[col]
+            # in test data a col might still have mean of nan, std of nan/0
+            if not np.isnan(colstd) and colstd> 0:
+                sf[mask] = colmean
+                sf = (sf - colmean) / colstd
+                sft.append(sf)
         
         # now add this aggregate feature to the feature dataframe
-        df['sf'] = sf.mean(axis=1)
+        df['sft'] = np.mean(np.array(sft).T, axis=1)
         # ... and drop the previous individual features
-        df = df.iloc[:,(df==df.median(axis=0)).sum(0) < 0.5*len(df.rows)]
-        
-        if curstr == 'train':
-            # generate some new examples by combining examples from the same writer
-            for ii, exA in enumerate(df.iterrows()):
-                for jj, exB in enumerate(df.iterrows()):
-                    if exA != exB and writers[ii] == writers[jj]:
-                        rand = np.random.random_sample()
-                        newex = rand*exA + (1-rand)*exB
-                        df = df.append(newex)
+        df = df.drop(sfcols, axis=1)
         
         # standardize the data
-        df = (df - df.mean(axis=0)) / df.std(axis=0)
+        if can_fit:
+            stdmean = df.mean(axis=0)
+            stdstd = df.std(axis=0)
         
-        if curstr == 'train':
-            # do a PCA and keep largest components
-            pca = decomposition.PCA(n_components=120, copy=False)
-            #pca = decomposition.KernelPCA(n_components=120, kernel='linear')
+        df = (df - stdmean) / stdstd
+        
+        # generate some new examples by combining examples from the same writer
+        if EXTRA_EX:
+            dft = df.T
+            newdf = dft.copy(deep=True)
+            for ii, exA in enumerate(dft):
+                for jj, exB in enumerate(dft):
+                    if exA != exB and writers[ii] == writers[jj] and langs[ii] == langs[jj]:
+                        for kk in range(EXTRA_EX):
+                            alpha = np.random.rand()
+                            randA = (1+(np.random.randn() / 10))*dft[exA]
+                            randB = (1+(np.random.randn() / 10))*dft[exB]
+                            if alpha > 0.5:
+                                newex = alpha * randA + (1-alpha) * randB
+                            else:
+                                newex = randA
+                            unique = str(exA+0.01*(kk+1))
+                            newdf.insert(ii*(EXTRA_EX+1)+kk+1, unique, newex)
+            
+            df = newdf.T
+        
+        df = np.array(df)
+        if can_fit:
+            # do a PCA and keep all components
+            decomp1 = decomposition.PCA(n_components=150, whiten=True)
+            decomp2 = decomposition.FastICA(n_components=150, algorithm='deflation', whiten=True)
+            decomp3 = decomposition.KernelPCA(n_components=150, kernel='rbf', degree=3)
             # only fit on train data
-            df = pca.fit(np.array(df))
+            decomp1 = decomp1.fit(df)
+            decomp2 = decomp2.fit(df)
+            decomp3 = decomp3.fit(df)
         
-        # apply pca to both train and test data
-        df = pca.transform(np.array(df))
+        df = np.concatenate((decomp1.transform(df), decomp2.transform(df), decomp3.transform(df)), axis=1)
         
         np.save(DATA_DIR+'feat_'+curstr+'.npy', df)
+        
+        print "finished with %s" % curstr
     
 
 def process_targets():
@@ -206,11 +249,15 @@ def process_targets():
     targets = np.array((targets, -targets+1)).T
     # targets per page, for combination model
     targets_pp = np.repeat(targets,[4]*targets.shape[0], axis=0)
+    targets_qpp = np.repeat(targets,[4*(EXTRA_EX+1)]*targets.shape[0], axis=0)
+    targets_pp = np.tile(targets_pp,3)
+    targets_qpp = np.tile(targets_qpp,3)
     np.save(DATA_DIR+'targets_per_page.npy', targets_pp)
+    np.save(DATA_DIR+'targets_per_page_extra.npy', targets_qpp)
     np.save(DATA_DIR+'targets.npy', targets)
     
 
 if __name__ == '__main__':
     process_targets()
-    generate_patches()
+    #generate_patches()
     process_features()

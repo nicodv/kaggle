@@ -8,8 +8,24 @@ DATA_PATH = '/home/nico/datasets/Kaggle/Bulldozers/'
 
 
 def get_train_test_df():
-    return pd.read_csv(os.path.join(DATA_PATH, "Train.csv"), converters={"saledate": parse}), \
-            pd.read_csv(os.path.join(DATA_PATH, "Valid.csv"), converters={"saledate": parse})
+    train = pd.read_csv(os.path.join(DATA_PATH, "TrainAndValid.csv"), converters={"saledate": parse})
+    train = train.drop(['YearMade','ProductGroup'], axis=1)
+    test = pd.read_csv(os.path.join(DATA_PATH, "Test.csv"), converters={"saledate": parse})
+    test = test.drop(['YearMade','ProductGroup'], axis=1)
+    app = pd.read_csv(os.path.join(DATA_PATH, "Machine_Appendix.csv"))
+    train = pd.merge(train, app[['MachineID','PrimaryUpper','MfgYear','ProductGroup']], on='MachineID', how='left')
+    test = pd.merge(test, app[['MachineID','PrimaryUpper','MfgYear','ProductGroup']], on='MachineID', how='left')
+    
+    # only select training examples that relate to the test set
+    interest = ['ModelID']
+    mask = np.array([False]*len(train))
+    for ii, col in enumerate(interest):
+        uniquevalues = np.unique(test[col].fillna(0).values)
+        mask = (mask | np.in1d(train[col],uniquevalues))
+    
+    train = train[mask]
+    
+    return train, test
 
 def write_submission(submission_name, predictions):
     _, test = get_train_test_df()
@@ -42,7 +58,7 @@ for col in columns:
                 'Ripper','Coupler','Hydraulics','fiModelSeries','ProductGroupDesc', \
                 'Tip_Control','Scarifier','Blade_Extension','Drive_System','fiModelDesc','Stick_Length', \
                 'PrimaryLower','fiProductClassDesc','fiManufacturerDesc','Enclosure_Type','Pushblock',\
-                'SaleDay','state','SaleMonth','fiModelDescriptor']
+                'SaleDay','state','fiModelDescriptor','UsageBand','Ride_Control']
     if col not in dropcols:
         if train[col].dtype == np.dtype('object'):
             s = np.unique(train[col].fillna(-1).values)
@@ -53,12 +69,12 @@ for col in columns:
             train_fea = train_fea.join(train[col].fillna(0))
             test_fea = test_fea.join(test[col].fillna(0))
 
-train_fea['age'] = train_fea.SaleYear - train_fea.YearMade
-test_fea['age'] = test_fea.SaleYear - test_fea.YearMade
-train_fea.age[train_fea.age.isnull()] = 0
-test_fea.age[test_fea.age.isnull()] = 0
-train_fea = train_fea.drop(['YearMade'], axis=1)
-test_fea = test_fea.drop(['YearMade'], axis=1)
+train_fea['age'] = train_fea.SaleYear - train_fea.MfgYear
+test_fea['age'] = test_fea.SaleYear - test_fea.MfgYear
+train_fea.age[(train_fea.age.isnull() | (train_fea.age>100))] = train_fea['age'].median()
+test_fea.age[(test_fea.age.isnull() | (test_fea.age>100))] = test_fea['age'].median()
+train_fea = train_fea.drop(['MfgYear'], axis=1)
+test_fea = test_fea.drop(['MfgYear'], axis=1)
 
 rf = ensemble.RandomForestRegressor(n_estimators=500, n_jobs=-1, max_features='log2', \
     compute_importances=True, oob_score=False, min_samples_split=20)

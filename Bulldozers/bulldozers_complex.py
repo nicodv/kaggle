@@ -7,7 +7,7 @@ from collections import defaultdict
 from sklearn import ensemble, metrics, cross_validation, svm
 import pylab
 
-data_path = '/home/nico/temp/Kaggle data/Bulldozers/'
+data_path = '/home/nico/datasets/Kaggle/Bulldozers/'
 submission_path = '/home/nico/Dropbox/Research Projects/Kaggle/Bulldozers/'
 
 def get_train_df(data_path):

@@ -6,7 +6,7 @@ CODE_DIR = '/home/nico/Code/kaggle/GenderWrite/'
 DATA_DIR = '/home/nico/datasets/Kaggle/GenderWrite/'
 
 # load configuration file and train model
-train_obj = serial.load_train_file(CODE_DIR+'gwconv.yaml')
+train_obj = serial.load_train_file(CODE_DIR+'gwmaxout.yaml')
 
 # layer-by-layer training
 #layers = train_obj.model.layers[:]
