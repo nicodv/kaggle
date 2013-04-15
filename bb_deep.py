@@ -3,164 +3,212 @@
 import os
 import numpy as np
 from theano import function
-import Whales.whaledata
+from theano import tensor as T
+
+import pylearn2.scripts.icml_2013_wrepl.blackbox.black_box_dataset as black_box_dataset
+import pylearn2.datasets.preprocessing as preprocessing
+from pylearn2.datasets.transformer_dataset import TransformerDataset
+
+import pylearn2.models.rbm as rbm
+from pylearn2.energy_functions.rbm_energy import GRBM_Type_1
+from pylearn2.base import StackedBlocks
+import pylearn2.models.mlp as mlp
+from pylearn2.models.softmax_regression import SoftmaxRegression
 
 from pylearn2.train import Train
-from pylearn2.models.mlp import MLP, Softmax, Sigmoid
-from pylearn2.corruption import GaussianCorruptor
-from pylearn2.costs.ebm_estimation import SMD
-from pylearn2.models.rbm import RBM, GaussianBinaryRBM
-from pylearn2.energy_functions.rbm_energy import GRBM_Type_1
-from pylearn2.training_algorithms.sgd import SGD, ExponentialDecay, MomentumAdjustor
+import pylearn2.training_algorithms.sgd as sgd
 from pylearn2.termination_criteria import EpochCounter
-from pylearn2.costs.cost import MethodCost
-from pylearn2.base import StackedBlocks
-from pylearn2.datasets.transformer_dataset import TransformerDataset
-from sklearn.metrics.metrics import auc_score
+import pylearn2.costs as costs
 
-DATA_DIR = '/home/nico/datasets/Kaggle/Whales/'
+DATA_DIR = '${PYLEARN2_DATA_PATH}/icml_2013_black_box/'
 
+def process_data():
+    # pre-process unsupervised data
+    if not os.path.exists(DATA_DIR+'preprocess.pkl'):
+        unsup_data = black_box_dataset.BlackBoxDataset('extra')
+        pipeline = preprocessing.Pipeline()
+        pipeline.items.append(preprocessing.Standardize(global_mean=False, global_std=False))
+        pipeline.items.append(preprocessing.ZCA(filter_bias=.1))
+        unsup_data.apply_preprocessor(preprocessor=pipeline, can_fit=True)
+        serial.save(DATA_DIR+'preprocess.pkl', pipeline)
+    else:
+        pipeline = serial.load(DATA_DIR+'preprocess.pkl')
+        unsup_data.apply_preprocessor(preprocessor=pipeline, can_fit=False)
+    
+    # process supervised training data
+    sup_data = []
+    which_data = ['train']*3 + ['public_test']
+    starts = [0, 900, None, None]
+    stops = [900, 1000, None, None]
+    for curstr, start, stop in zip(which_data, starts, stop)
+        sup_data.append(black_box_dataset.BlackBoxDataset(
+        which_set=curstr,
+        start=start,
+        stop=stop,
+        preprocessor=pipeline
+        ))
+    
+    return unsup_data, sup_data
 
-def get_grbm(structure):
-    n_input, n_output = structure
-    config = {
-        'nvis': n_input,
-        'nhid': n_output,
-        "irange" : 0.05,
-        "energy_function_class" : GRBM_Type_1,
-        "learn_sigma" : False,
-        "init_sigma" : 1.,
-        "init_bias_hid" : -1.,
-        "mean_vis" : True,
-        "sigma_lr_scale" : 1.
-        }
-    return GaussianBinaryRBM(**config)
-
-def get_rbm(structure):
-    n_input, n_output = structure
-    config = {
-        'nvis': n_input,
-        'nhid': n_output,
-        "irange" : 0.05,
-        "init_bias_hid" : -1.
-        }
-    return RBM(**config)
-
-# hier is tegenwoordig de softmax regression-class voor
-def get_classifier(n_inputs, nclasses=2):
-    config = {
-        'batch_size': 100,
-        'nvis': n_inputs,
-        'dropout_include_probs': [0.5, 1],
-        'dropout_input_include_prob': 0.8,
-        'layers': [
-            Sigmoid(100, layer_name='h0', irange=.05, init_bias=-2.),
-            Softmax(layer_name='y', n_classes=nclasses, istdev=.025, W_lr_scale=0.25),
-        ]
-    }
-    return MLP(**config)
-
-def get_rbmtrainer(layer, trainset):
-    train_algo = SGD(
-        batch_size = 100,
-        learning_rate = 0.1,
-        init_momentum = 0.5,
-        monitoring_batches =  100,
-        monitoring_dataset =  trainset,
-        cost = SMD(corruptor=GaussianCorruptor(stdev=0.4)),
-        termination_criterion =  EpochCounter(50),
-        update_callbacks = ExponentialDecay(decay_factor=1.0001, min_lr=0.0001)
+def construct_stacked_rbm(structure):
+    # some RBM-universal settings
+    irange = 0.01
+    init_bias = 0.
+    
+    grbm = rbm.GaussianBinaryRBM(
+        nvis=structure[0],
+        nhid=structure[1],
+        irange=irange,
+        energy_function_class=GRBM_Type_1,
+        learn_sigma=False,
+        init_sigma=1.,
+        init_bias_hid=init_bias,
+        mean_vis=True,
+        sigma_lr_scale=1.
+    )
+    rbms = []
+    for vsize,hsize in zip(structure[1:-1], structure[2:]):
+        rbms.append(rbm.RBM(
+            nvis=vsize,
+            nhid=hsize,
+            irange=irange,
+            init_bias_hid=init_bias
         )
-    model = layer
-    return Train(model = model, algorithm = train_algo, dataset = trainset, \
+    return StackedBlocks([grbm] + rbms)
+
+def construct_dbn(stackedrbm):
+    layers = []
+    for ii,rbm in enumerate(stackedrbm.layers):
+        layers.append(RBM_Layer(
+            layer_name='h'+ii,
+            rbm=rbm
+        ))
+    layers.append(SoftmaxRegression(
+        nvis=stackedrbm.layers[-1].nhid,
+        n_classes=9,
+        irange=irange,
+        W_lr_scale=0.25
+    ))
+    dbn = mlp.MLP(
+        batch_size=batch_size,
+        nvis=structure[-1],
+        layers=layers
+    )
+    return dbn
+
+def get_pretrainer(layer, data, batch_size):
+    # GBRBM needs smaller learning rate for stability
+    if layer isinstance(rbm.GaussianBinaryRBM):
+        init_lr = 0.001
+    else:
+        init_lr = 0.1
+        
+    train_algo = sgd.SGD(
+        batch_size = batch_size,
+        learning_rate = init_lr,
+        init_momentum = 0.5,
+        monitoring_batches = 100/batch_size,
+        monitoring_dataset = data,
+        cost = costs.cost.SumOfCosts(
+            costs=[
+                costs.dbm.VariationalPCD(num_chains=100, num_gibbs_step=5),
+                costs.dbm.WeightDecay(coeffs=[0.0001]),
+                costs.dbm.TorontoSparsity(targets=[0.2], coeffs=[0.001])
+                ]
+            ),
+        termination_criterion =  EpochCounter(100),
+        update_callbacks = ExponentialDecay(decay_factor=1.00005, min_lr=0.0001)
+        )
+    return Train(model=layer, algorithm=train_algo, dataset=data, \
             extensions=[MomentumAdjustor(final_momentum=0.9, start=0, saturate=20), ])
 
-def get_hybtrainer(model, trainset, validset=None):
-    monitoring_batches = None if validset is None else 100
+def get_finetuner(model, trainset, validset=None, batch_size=100):
     train_algo = SGD(
         batch_size = 100,
         init_momentum = 0.5,
         learning_rate = 0.5,
-        monitoring_batches = monitoring_batches,
+        monitoring_batches = 100/batch_size,
         monitoring_dataset = validset,
-        cost = MethodCost(method='cost_from_X', supervised=1),
-        termination_criterion = EpochCounter(100),
+        cost = costs.mlp.dropout.Dropout(input_include_prob={'h0': 0.8}, input_scales={'h0': 1.}),
+        termination_criterion = EpochCounter(250),
         update_callbacks = ExponentialDecay(decay_factor=1.0001, min_lr=0.001)
     )
-    return Train(model=model, algorithm=train_algo, dataset=trainset, save_freq=0, save_path='epoch', \
+    return Train(model=model, algorithm=train_algo, dataset=trainset, save_freq=0, \
             extensions=[MomentumAdjustor(final_momentum=0.95, start=0, saturate=80), ])
 
-def get_output(model, tdata, batch_size=100, squeeze=False):
-    # get output submodel classifiers
+def get_output(model, data, batch_size):
+    model.set_batch_size(batch_size)
+    # dataset must be multiple of batch size of some batches will have
+    # different sizes. theano convolution requires a hard-coded batch size
+    m = data.X.shape[0]
+    extra = batch_size - m % batch_size
+    assert (m + extra) % batch_size == 0
+    if extra > 0:
+        data.X = np.concatenate((data.X, np.zeros((extra, data.X.shape[1]), dtype=data.X.dtype)), axis=0)
+    assert data.X.shape[0] % batch_size == 0
+    
     Xb = model.get_input_space().make_theano_batch()
     Yb = model.fprop(Xb)
     
-    data = tdata.get_topological_view()
-    # fill up with zeroes for dividible by batch number
-    extralength = batch_size - data.shape[0]%batch_size
+    y = T.argmax(Yb, axis=1)
     
-    if extralength < 100:
-        data = np.append(data,np.zeros([extralength, data.shape[1],data.shape[2],data.shape[3]]), axis=0)
-        data = data.astype('float32')
-    if squeeze:
-        data = data.squeeze()
+    propagate = function([Xb], y)
     
-    propagate = function([Xb], Yb)
-    
-    output = []
-    for ii in xrange(int(data.shape[0]/batch_size)):
-        seldata = data[ii*batch_size:(ii+1)*batch_size,:]
-        output.append(propagate(seldata))
+    y = []
+    for ii in xrange(data.X.shape[0]/batch_size):
+        x_arg = data[ii*batch_size:(ii+1)*batch_size,:]
+        if X.ndim > 2:
+            x_arg = data.get_topological_view(x_arg)
+        y.append(f(x_arg.astype(X.dtype)))
     
     output = np.reshape(output,[data.shape[0],-1])
     
-    if extralength < 100:
-        # remove the filler
-        output = output[:-extralength]
+    y = np.concatenate(y)
+    assert y.ndim == 1
+    assert y.shape[0] == dataset.X.shape[0]
+    # discard any zero-padding that was used to give the batches uniform size
+    y = y[:m]
     
     return output
 
 if __name__ == '__main__':
     
+    # some settings
     submission = False
+    structure = [1875, 500, 500]
+    batch_size = 50
     
-    trainset, validset, testset = [], [], []
-    for ii, which_data in enumerate(('melspectrum','specfeat')):
-        trset,vaset,teset = Whales.whaledata.get_dataset(which_data, tot=submission)
-        trainset.append(trset)
-        validset.append(vaset)
-        testset.append(teset)
+    unsup_data, sup_data = process_data()
     
-    # build layers
-    layers = []
-    structure = [[67*34, 400], [400, 400], [400, 100], [100, 2]]
-    layers.append(get_grbm(structure[0]))
-    layers.append(get_rbm(structure[1]))
-    layers.append(get_rbm(structure[2]))
-    layers.append(get_classifier(structure[3][0]))
+    stackedrbm = construct_stacked_rbm(structure)
     
-    dset = 0
-    #construct training sets for different layers
-    dbn_trainset = [ trainset[dset] ,
-                TransformerDataset( raw = trainset[dset], transformer = layers[0] ),
-                TransformerDataset( raw = trainset[dset], transformer = StackedBlocks( layers[0:2] )),
-                TransformerDataset( raw = trainset[dset], transformer = StackedBlocks( layers[0:3] ))  ]
-    dbn_validset = [ validset[dset] ,
-                TransformerDataset( raw = validset[dset], transformer = layers[0] ),
-                TransformerDataset( raw = validset[dset], transformer = StackedBlocks( layers[0:2] )),
-                TransformerDataset( raw = validset[dset], transformer = StackedBlocks( layers[0:3] ))  ]
+    # pre-train model
+    for ii, layer in enumerate(stackedrbm.layers):
+        utraindata = TransformerDataset(raw=unsup_data, transformer=stackedrbm[:(ii+1)])
+        trainer = get_pretrainer(layer, utraindata, batch_size)
+        trainer.main_loop()
     
-    # construct layer trainers
-    layer_trainers = []
-    layer_trainers.append(get_rbmtrainer(layers[0], dbn_trainset[0]))
-    layer_trainers.append(get_rbmtrainer(layers[1], dbn_trainset[1]))
-    layer_trainers.append(get_rbmtrainer(layers[2], dbn_trainset[2]))
-    layer_trainers.append(get_hybtrainer(layers[3], dbn_trainset[3], dbn_validset[3]))
+    # construct DBN
+    # (necessary to convert RBM layers to sigmoid layers for dropout?)
+    dbn = construct_dbn(stackedrbm)
     
-    #unsupervised pretraining
-    for layer_trainer in layer_trainers[0:3]:
-        layer_trainer.main_loop()
+    # train DBN
+    if submission:
+        traindata = sup_data[0]
+        validdata = sup_data[1]
+    else:
+        traindata = sup_data[2]
+        validdata = sup_data[2]
     
-    #supervised training
-    layer_trainers[-1].main_loop()
+    finetuner = get_finetuner(dbn, traindata, validdata, batch_size)
+    finetuner.main_loop()
+    
+    # get output
+    output = get_output(dbn, sup_data[3], batch_size)
+    
+    # create submission
+    out = open(out_path, 'w')
+    for i in xrange(output.shape[0]):
+        out.write('%d.0\n' % (output[i] + 1))
+    out.close()
     
