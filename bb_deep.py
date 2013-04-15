@@ -207,7 +207,7 @@ if __name__ == '__main__':
     output = get_output(dbn, sup_data[3], batch_size)
     
     # create submission
-    out = open(out_path, 'w')
+    out = open(DATA_DIR+'submission.csv', 'w')
     for i in xrange(output.shape[0]):
         out.write('%d.0\n' % (output[i] + 1))
     out.close()
