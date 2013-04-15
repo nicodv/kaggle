@@ -137,8 +137,8 @@ def train_model(traindata, targets):
         # get scores
         scores[i] = cross_validation.cross_val_score(models[i], traindata, targets, \
                 cv=cv, n_jobs=-1, score_func=metrics.accuracy_score)
-        print("Cross-validation accuracy on the training set for model %d:" % i)
-        print("%0.3f (+/-%0.03f)" % (scores[i].mean(), scores[i].std() / 2))
+        print "Cross-validation accuracy on the training set for model %d:" % i
+        print "%0.3f (+/-%0.03f)" % (scores[i].mean(), scores[i].std() / 2)
         
         models[i].fit(traindata, targets)
         
@@ -207,7 +207,7 @@ predtot[Fmask[Fmask==False].index.tolist()] = predM
 totdata.survived[totdata.train==0] = predtot
 totdata.to_csv(DATA_DIR+'rawdata.txt', sep=',', header=True, index=False)
 
-print("Fraction survivors: %d / %d" % (sum(predtot), len(predtot)))
+print "Fraction survivors: %d / %d" % (sum(predtot), len(predtot))
 
 # save to CSV
 predtot.to_csv(DATA_DIR+'submission.csv', sep=',', header=False, index=False)

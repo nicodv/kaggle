@@ -5,7 +5,8 @@ import numpy as np
 from theano import function
 from theano import tensor as T
 
-import pylearn2.scripts.icml_2013_wrepl.blackbox.black_box_dataset as black_box_dataset
+from pylearn2.utils import serial
+import BlackBox.black_box_dataset as black_box_dataset
 import pylearn2.datasets.preprocessing as preprocessing
 from pylearn2.datasets.transformer_dataset import TransformerDataset
 
@@ -20,7 +21,7 @@ import pylearn2.training_algorithms.sgd as sgd
 from pylearn2.termination_criteria import EpochCounter
 import pylearn2.costs as costs
 
-DATA_DIR = '${PYLEARN2_DATA_PATH}/icml_2013_black_box/'
+DATA_DIR = '/home/nico/datasets/Kaggle/BlackBox/'
 
 def process_data():
     # pre-process unsupervised data
@@ -40,7 +41,7 @@ def process_data():
     which_data = ['train']*3 + ['public_test']
     starts = [0, 900, None, None]
     stops = [900, 1000, None, None]
-    for curstr, start, stop in zip(which_data, starts, stop)
+    for curstr, start, stop in zip(which_data, starts, stops):
         sup_data.append(black_box_dataset.BlackBoxDataset(
         which_set=curstr,
         start=start,
@@ -73,20 +74,20 @@ def construct_stacked_rbm(structure):
             nhid=hsize,
             irange=irange,
             init_bias_hid=init_bias
-        )
+        ))
     return StackedBlocks([grbm] + rbms)
 
 def construct_dbn(stackedrbm):
     layers = []
     for ii,rbm in enumerate(stackedrbm.layers):
-        layers.append(RBM_Layer(
+        layers.append(mlp.RBM_Layer(
             layer_name='h'+ii,
             rbm=rbm
         ))
     layers.append(SoftmaxRegression(
         nvis=stackedrbm.layers[-1].nhid,
         n_classes=9,
-        irange=irange,
+        irange=0.05,
         W_lr_scale=0.25
     ))
     dbn = mlp.MLP(
@@ -98,7 +99,7 @@ def construct_dbn(stackedrbm):
 
 def get_pretrainer(layer, data, batch_size):
     # GBRBM needs smaller learning rate for stability
-    if layer isinstance(rbm.GaussianBinaryRBM):
+    if isinstance(layer, rbm.GaussianBinaryRBM):
         init_lr = 0.001
     else:
         init_lr = 0.1
@@ -117,13 +118,13 @@ def get_pretrainer(layer, data, batch_size):
                 ]
             ),
         termination_criterion =  EpochCounter(100),
-        update_callbacks = ExponentialDecay(decay_factor=1.00005, min_lr=0.0001)
+        update_callbacks = sgd.ExponentialDecay(decay_factor=1.00005, min_lr=0.0001)
         )
     return Train(model=layer, algorithm=train_algo, dataset=data, \
-            extensions=[MomentumAdjustor(final_momentum=0.9, start=0, saturate=20), ])
+            extensions=[sgd.MomentumAdjustor(final_momentum=0.9, start=0, saturate=20), ])
 
 def get_finetuner(model, trainset, validset=None, batch_size=100):
-    train_algo = SGD(
+    train_algo = sgd.SGD(
         batch_size = 100,
         init_momentum = 0.5,
         learning_rate = 0.5,
@@ -131,10 +132,10 @@ def get_finetuner(model, trainset, validset=None, batch_size=100):
         monitoring_dataset = validset,
         cost = costs.mlp.dropout.Dropout(input_include_prob={'h0': 0.8}, input_scales={'h0': 1.}),
         termination_criterion = EpochCounter(250),
-        update_callbacks = ExponentialDecay(decay_factor=1.0001, min_lr=0.001)
+        update_callbacks = sgd.ExponentialDecay(decay_factor=1.0001, min_lr=0.001)
     )
     return Train(model=model, algorithm=train_algo, dataset=trainset, save_freq=0, \
-            extensions=[MomentumAdjustor(final_momentum=0.95, start=0, saturate=80), ])
+            extensions=[sgd.MomentumAdjustor(final_momentum=0.95, start=0, saturate=80), ])
 
 def get_output(model, data, batch_size):
     model.set_batch_size(batch_size)
@@ -152,24 +153,24 @@ def get_output(model, data, batch_size):
     
     y = T.argmax(Yb, axis=1)
     
-    propagate = function([Xb], y)
+    f = function([Xb], y)
     
     y = []
     for ii in xrange(data.X.shape[0]/batch_size):
         x_arg = data[ii*batch_size:(ii+1)*batch_size,:]
-        if X.ndim > 2:
+        if Xb.ndim > 2:
             x_arg = data.get_topological_view(x_arg)
-        y.append(f(x_arg.astype(X.dtype)))
+        y.append(f(x_arg.astype(Xb.dtype)))
     
-    output = np.reshape(output,[data.shape[0],-1])
+    y = np.reshape(y,[data.shape[0],-1])
     
     y = np.concatenate(y)
     assert y.ndim == 1
-    assert y.shape[0] == dataset.X.shape[0]
+    assert y.shape[0] == data.X.shape[0]
     # discard any zero-padding that was used to give the batches uniform size
     y = y[:m]
     
-    return output
+    return y
 
 if __name__ == '__main__':
     
