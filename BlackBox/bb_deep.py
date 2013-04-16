@@ -25,8 +25,8 @@ DATA_DIR = '/home/nico/datasets/Kaggle/BlackBox/'
 
 def process_data():
     # pre-process unsupervised data
+    unsup_data = black_box_dataset.BlackBoxDataset('extra')
     if not os.path.exists(DATA_DIR+'preprocess.pkl'):
-        unsup_data = black_box_dataset.BlackBoxDataset('extra')
         pipeline = preprocessing.Pipeline()
         pipeline.items.append(preprocessing.Standardize(global_mean=False, global_std=False))
         pipeline.items.append(preprocessing.ZCA(filter_bias=.1))
