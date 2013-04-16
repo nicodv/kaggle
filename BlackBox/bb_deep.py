@@ -91,9 +91,8 @@ def construct_dbn(stackedrbm):
         W_lr_scale=0.25
     ))
     dbn = mlp.MLP(
-        batch_size=batch_size,
-        nvis=structure[-1],
-        layers=layers
+        layers=layers,
+        nvis=stackedrbm.layers[0].nvis
     )
     return dbn
 
@@ -121,7 +120,7 @@ def get_pretrainer(layer, data, batch_size):
         update_callbacks = sgd.ExponentialDecay(decay_factor=1.00005, min_lr=0.0001)
         )
     return Train(model=layer, algorithm=train_algo, dataset=data, \
-            extensions=[sgd.MomentumAdjustor(final_momentum=0.9, start=0, saturate=20), ])
+            extensions=[sgd.MomentumAdjustor(final_momentum=0.9, start=0, saturate=80), ])
 
 def get_finetuner(model, trainset, validset=None, batch_size=100):
     train_algo = sgd.SGD(
@@ -135,7 +134,7 @@ def get_finetuner(model, trainset, validset=None, batch_size=100):
         update_callbacks = sgd.ExponentialDecay(decay_factor=1.0001, min_lr=0.001)
     )
     return Train(model=model, algorithm=train_algo, dataset=trainset, save_freq=0, \
-            extensions=[sgd.MomentumAdjustor(final_momentum=0.95, start=0, saturate=80), ])
+            extensions=[sgd.MomentumAdjustor(final_momentum=0.9, start=0, saturate=200), ])
 
 def get_output(model, data, batch_size):
     model.set_batch_size(batch_size)
@@ -150,9 +149,7 @@ def get_output(model, data, batch_size):
     
     Xb = model.get_input_space().make_theano_batch()
     Yb = model.fprop(Xb)
-    
     y = T.argmax(Yb, axis=1)
-    
     f = function([Xb], y)
     
     y = []
@@ -163,7 +160,6 @@ def get_output(model, data, batch_size):
         y.append(f(x_arg.astype(Xb.dtype)))
     
     y = np.reshape(y,[data.shape[0],-1])
-    
     y = np.concatenate(y)
     assert y.ndim == 1
     assert y.shape[0] == data.X.shape[0]
