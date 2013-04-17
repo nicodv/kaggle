@@ -20,21 +20,23 @@ from pylearn2.train import Train
 import pylearn2.training_algorithms.sgd as sgd
 from pylearn2.termination_criteria import EpochCounter
 import pylearn2.costs as costs
+from pylearn2.costs.dbm import VariationalPCD, WeightDecay, TorontoSparsity
 
 DATA_DIR = '/home/nico/datasets/Kaggle/BlackBox/'
 
 def process_data():
     # pre-process unsupervised data
-    unsup_data = black_box_dataset.BlackBoxDataset('extra')
-    if not os.path.exists(DATA_DIR+'preprocess.pkl'):
+    if not os.path.exists(DATA_DIR+'preprocess.pkl') and os.path.exists(DATA_DIR+'unsup_prep_data.npy'):
+        unsup_data = black_box_dataset.BlackBoxDataset('extra')
         pipeline = preprocessing.Pipeline()
         pipeline.items.append(preprocessing.Standardize(global_mean=False, global_std=False))
         pipeline.items.append(preprocessing.ZCA(filter_bias=.1))
         unsup_data.apply_preprocessor(preprocessor=pipeline, can_fit=True)
         serial.save(DATA_DIR+'preprocess.pkl', pipeline)
+        np.save(DATA_DIR+'unsup_prep_data.npy', unsup_data)
     else:
         pipeline = serial.load(DATA_DIR+'preprocess.pkl')
-        unsup_data.apply_preprocessor(preprocessor=pipeline, can_fit=False)
+        unsup_data = serial.load(DATA_DIR+'unsup_prep_data.npy')
     
     # process supervised training data
     sup_data = []
@@ -111,9 +113,9 @@ def get_pretrainer(layer, data, batch_size):
         monitoring_dataset = data,
         cost = costs.cost.SumOfCosts(
             costs=[
-                costs.dbm.VariationalPCD(num_chains=100, num_gibbs_step=5),
-                costs.dbm.WeightDecay(coeffs=[0.0001]),
-                costs.dbm.TorontoSparsity(targets=[0.2], coeffs=[0.001])
+                VariationalPCD(num_chains=100, num_gibbs_step=5),
+                WeightDecay(coeffs=[0.0001]),
+                TorontoSparsity(targets=[0.2], coeffs=[0.001])
                 ]
             ),
         termination_criterion =  EpochCounter(100),
@@ -180,8 +182,8 @@ if __name__ == '__main__':
     stackedrbm = construct_stacked_rbm(structure)
     
     # pre-train model
-    for ii, layer in enumerate(stackedrbm.layers):
-        utraindata = TransformerDataset(raw=unsup_data, transformer=StackedBlocks(stackedrbm.layers[:(ii+1)]))
+    for ii, layer in enumerate(stackedrbm.layers()):
+        utraindata = TransformerDataset(raw=unsup_data, transformer=StackedBlocks(stackedrbm.layers()[:(ii+1)]))
         trainer = get_pretrainer(layer, utraindata, batch_size)
         trainer.main_loop()
     
