@@ -113,7 +113,7 @@ def get_pretrainer(layer, data, batch_size):
         monitoring_dataset = data,
         cost = costs.cost.SumOfCosts(
             costs=[
-                VariationalPCD(num_chains=100, num_gibbs_step=5),
+                VariationalPCD(num_chains=100, num_gibbs_steps=5),
                 WeightDecay(coeffs=[0.0001]),
                 TorontoSparsity(targets=[0.2], coeffs=[0.001])
                 ]
