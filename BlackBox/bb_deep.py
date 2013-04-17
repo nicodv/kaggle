@@ -183,7 +183,8 @@ if __name__ == '__main__':
     
     # pre-train model
     for ii, layer in enumerate(stackedrbm.layers()):
-        utraindata = TransformerDataset(raw=unsup_data, transformer=StackedBlocks(stackedrbm.layers()[:(ii+1)]))
+        utraindata = unsup_data if ii==0 else TransformerDataset(raw=unsup_data,
+                                                transformer=StackedBlocks(stackedrbm.layers()[:ii]))
         trainer = get_pretrainer(layer, utraindata, batch_size)
         trainer.main_loop()
     
