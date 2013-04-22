@@ -21,6 +21,8 @@ import pylearn2.training_algorithms.sgd as sgd
 from pylearn2.termination_criteria import EpochCounter
 import pylearn2.costs as costs
 from pylearn2.costs.dbm import VariationalPCD, WeightDecay, TorontoSparsity
+from pylearn2.corruption import GaussianCorruptor
+from pylearn2.costs.ebm_estimation import SMD
 
 DATA_DIR = '/home/nico/datasets/Kaggle/BlackBox/'
 
@@ -41,8 +43,8 @@ def process_data():
     # process supervised training data
     sup_data = []
     which_data = ['train']*3 + ['public_test']
-    starts = [0, 900, None, None]
-    stops = [900, 1000, None, None]
+    starts = [0, 800, None, None]
+    stops = [800, 1000, None, None]
     for curstr, start, stop in zip(which_data, starts, stops):
         sup_data.append(black_box_dataset.BlackBoxDataset(
         which_set=curstr,
@@ -55,19 +57,19 @@ def process_data():
 
 def construct_stacked_rbm(structure):
     # some RBM-universal settings
-    irange = 0.01
-    init_bias = 0.
+    irange = 0.05
+    init_bias = -0.5
     
     grbm = rbm.GaussianBinaryRBM(
         nvis=structure[0],
         nhid=structure[1],
         irange=irange,
         energy_function_class=GRBM_Type_1,
-        learn_sigma=False,
+        learn_sigma=True,
         init_sigma=1.,
         init_bias_hid=init_bias,
         mean_vis=True,
-        sigma_lr_scale=1.
+        sigma_lr_scale=0.1
     )
     rbms = []
     for vsize,hsize in zip(structure[1:-1], structure[2:]):
@@ -101,9 +103,13 @@ def construct_dbn(stackedrbm):
 def get_pretrainer(layer, data, batch_size):
     # GBRBM needs smaller learning rate for stability
     if isinstance(layer, rbm.GaussianBinaryRBM):
-        init_lr = 0.001
+        init_lr = 0.01
+        curcost = costs.cost.MethodCost('get_default_cost')
     else:
         init_lr = 0.1
+        curcost = costs.cost.SumOfCosts([VariationalPCD(num_chains=100, num_gibbs_steps=5),
+                WeightDecay(coeffs=[0.0001]),
+                TorontoSparsity(targets=[0.2], coeffs=[0.001])])
         
     train_algo = sgd.SGD(
         batch_size = batch_size,
@@ -111,15 +117,9 @@ def get_pretrainer(layer, data, batch_size):
         init_momentum = 0.5,
         monitoring_batches = 100/batch_size,
         monitoring_dataset = data,
-        cost = costs.cost.SumOfCosts(
-            costs=[
-                VariationalPCD(num_chains=100, num_gibbs_steps=5),
-                WeightDecay(coeffs=[0.0001]),
-                TorontoSparsity(targets=[0.2], coeffs=[0.001])
-                ]
-            ),
-        termination_criterion =  EpochCounter(100),
-        update_callbacks = sgd.ExponentialDecay(decay_factor=1.00005, min_lr=0.0001)
+        cost = curcost,
+        termination_criterion =  EpochCounter(25),
+        update_callbacks = sgd.ExponentialDecay(decay_factor=1.00001, min_lr=0.0001)
         )
     return Train(model=layer, algorithm=train_algo, dataset=data, \
             extensions=[sgd.MomentumAdjustor(final_momentum=0.9, start=0, saturate=80), ])
@@ -174,7 +174,7 @@ if __name__ == '__main__':
     
     # some settings
     submission = False
-    structure = [1875, 500, 500]
+    structure = [1875, 1000, 1000]
     batch_size = 50
     
     unsup_data, sup_data = process_data()
