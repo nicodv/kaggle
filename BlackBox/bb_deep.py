@@ -20,25 +20,25 @@ from pylearn2.train import Train
 import pylearn2.training_algorithms.sgd as sgd
 from pylearn2.termination_criteria import EpochCounter
 import pylearn2.costs as costs
-from pylearn2.costs.dbm import VariationalPCD, WeightDecay, TorontoSparsity
 from pylearn2.corruption import GaussianCorruptor
-from pylearn2.costs.ebm_estimation import SMD
+from pylearn2.costs.ebm_estimation import SMD, NCE
+from pylearn2.distributions.mnd import MND
 
 DATA_DIR = '/home/nico/datasets/Kaggle/BlackBox/'
 
 def process_data():
     # pre-process unsupervised data
-    if not os.path.exists(DATA_DIR+'preprocess.pkl') and os.path.exists(DATA_DIR+'unsup_prep_data.npy'):
+    if not os.path.exists(DATA_DIR+'preprocess.pkl') and os.path.exists(DATA_DIR+'unsup_prep_data.pkl'):
         unsup_data = black_box_dataset.BlackBoxDataset('extra')
         pipeline = preprocessing.Pipeline()
         pipeline.items.append(preprocessing.Standardize(global_mean=False, global_std=False))
         pipeline.items.append(preprocessing.ZCA(filter_bias=.1))
         unsup_data.apply_preprocessor(preprocessor=pipeline, can_fit=True)
         serial.save(DATA_DIR+'preprocess.pkl', pipeline)
-        np.save(DATA_DIR+'unsup_prep_data.npy', unsup_data)
+        serial.save(DATA_DIR+'unsup_prep_data.pkl', unsup_data)
     else:
         pipeline = serial.load(DATA_DIR+'preprocess.pkl')
-        unsup_data = serial.load(DATA_DIR+'unsup_prep_data.npy')
+        unsup_data = serial.load(DATA_DIR+'unsup_prep_data.pkl')
     
     # process supervised training data
     sup_data = []
@@ -104,21 +104,17 @@ def get_pretrainer(layer, data, batch_size):
     # GBRBM needs smaller learning rate for stability
     if isinstance(layer, rbm.GaussianBinaryRBM):
         init_lr = 0.01
-        curcost = costs.cost.MethodCost('get_default_cost')
     else:
         init_lr = 0.1
-        curcost = costs.cost.SumOfCosts([VariationalPCD(num_chains=100, num_gibbs_steps=5),
-                WeightDecay(coeffs=[0.0001]),
-                TorontoSparsity(targets=[0.2], coeffs=[0.001])])
-        
+    
     train_algo = sgd.SGD(
         batch_size = batch_size,
         learning_rate = init_lr,
         init_momentum = 0.5,
         monitoring_batches = 100/batch_size,
-        monitoring_dataset = data,
-        cost = curcost,
-        termination_criterion =  EpochCounter(25),
+        monitoring_dataset = {'train': data},
+        cost = SMD(GaussianCorruptor(0.5)),
+        termination_criterion =  EpochCounter(250),
         update_callbacks = sgd.ExponentialDecay(decay_factor=1.00001, min_lr=0.0001)
         )
     return Train(model=layer, algorithm=train_algo, dataset=data, \
@@ -130,7 +126,7 @@ def get_finetuner(model, trainset, validset=None, batch_size=100):
         init_momentum = 0.5,
         learning_rate = 0.5,
         monitoring_batches = 100/batch_size,
-        monitoring_dataset = validset,
+        monitoring_dataset = {'train': trainset, 'valid': validset},
         cost = costs.mlp.dropout.Dropout(input_include_prob={'h0': 0.8}, input_scales={'h0': 1.}),
         termination_criterion = EpochCounter(250),
         update_callbacks = sgd.ExponentialDecay(decay_factor=1.0001, min_lr=0.001)
