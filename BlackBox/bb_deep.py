@@ -1,6 +1,7 @@
 #!/usr/bin/python
 
 import os
+import cPickle
 import numpy as np
 from theano import function
 from theano import tensor as T
@@ -28,17 +29,23 @@ DATA_DIR = '/home/nico/datasets/Kaggle/BlackBox/'
 
 def process_data():
     # pre-process unsupervised data
-    if not os.path.exists(DATA_DIR+'preprocess.pkl') and os.path.exists(DATA_DIR+'unsup_prep_data.pkl'):
+    if not os.path.exists(DATA_DIR+'preprocess.pkl') or not os.path.exists(DATA_DIR+'unsup_prep_data.pkl'):
         unsup_data = black_box_dataset.BlackBoxDataset('extra')
         pipeline = preprocessing.Pipeline()
         pipeline.items.append(preprocessing.Standardize(global_mean=False, global_std=False))
         pipeline.items.append(preprocessing.ZCA(filter_bias=.1))
         unsup_data.apply_preprocessor(preprocessor=pipeline, can_fit=True)
         serial.save(DATA_DIR+'preprocess.pkl', pipeline)
-        serial.save(DATA_DIR+'unsup_prep_data.pkl', unsup_data)
+        
+        # why the hell do I get pickling errors if I use serial here? solve by pickling myself
+        #serial.save(DATA_DIR+'unsup_prep_data.pkl', unsup_data)
+        out = open(DATA_DIR+'unsup_prep_data.pkl', 'w')
+        cPickle.dump(unsup_data, out)
+        out.close()
     else:
         pipeline = serial.load(DATA_DIR+'preprocess.pkl')
-        unsup_data = serial.load(DATA_DIR+'unsup_prep_data.pkl')
+        #unsup_data = serial.load(DATA_DIR+'unsup_prep_data.pkl')
+        unsup_data = cPickle.load(open(DATA_DIR+'unsup_prep_data.pkl', 'r'))
     
     # process supervised training data
     sup_data = []
