@@ -1,7 +1,7 @@
 #!/usr/bin/python
 
 import os
-import cPickle
+import pickle
 import numpy as np
 from theano import function
 from theano import tensor as T
@@ -21,6 +21,7 @@ from pylearn2.train import Train
 import pylearn2.training_algorithms.sgd as sgd
 from pylearn2.termination_criteria import EpochCounter
 import pylearn2.costs as costs
+import pylearn2.costs.mlp.dropout as dropout
 from pylearn2.corruption import GaussianCorruptor
 from pylearn2.costs.ebm_estimation import SMD, NCE
 from pylearn2.distributions.mnd import MND
@@ -40,12 +41,12 @@ def process_data():
         # why the hell do I get pickling errors if I use serial here? solve by pickling myself
         #serial.save(DATA_DIR+'unsup_prep_data.pkl', unsup_data)
         out = open(DATA_DIR+'unsup_prep_data.pkl', 'w')
-        cPickle.dump(unsup_data, out)
+        pickle.dump(unsup_data, out)
         out.close()
     else:
         pipeline = serial.load(DATA_DIR+'preprocess.pkl')
         #unsup_data = serial.load(DATA_DIR+'unsup_prep_data.pkl')
-        unsup_data = cPickle.load(open(DATA_DIR+'unsup_prep_data.pkl', 'r'))
+        unsup_data = pickle.load(open(DATA_DIR+'unsup_prep_data.pkl', 'r'))
     
     # process supervised training data
     sup_data = []
@@ -90,29 +91,32 @@ def construct_stacked_rbm(structure):
 
 def construct_dbn(stackedrbm):
     layers = []
-    for ii,rbm in enumerate(stackedrbm.layers):
-        layers.append(mlp.RBM_Layer(
-            layer_name='h'+ii,
-            rbm=rbm
+    for ii,rbm in enumerate(stackedrbm.layers()):
+        layers.append(mlp.PretrainedLayer(
+            layer_name='h'+str(ii),
+            layer_content=rbm
         ))
-    layers.append(SoftmaxRegression(
-        nvis=stackedrbm.layers[-1].nhid,
+    layers.append(mlp.Softmax(
+        #nvis=stackedrbm.layers()[-1].nhid,
         n_classes=9,
+        layer_name='y',
         irange=0.05,
         W_lr_scale=0.25
     ))
     dbn = mlp.MLP(
         layers=layers,
-        nvis=stackedrbm.layers[0].nvis
+        nvis=stackedrbm.layers()[0].nvis
     )
     return dbn
 
 def get_pretrainer(layer, data, batch_size):
     # GBRBM needs smaller learning rate for stability
     if isinstance(layer, rbm.GaussianBinaryRBM):
-        init_lr = 0.01
-    else:
         init_lr = 0.1
+        dec_fac = 1.00001
+    else:
+        init_lr = 0.5
+        dec_fac = 1.00001
     
     train_algo = sgd.SGD(
         batch_size = batch_size,
@@ -122,10 +126,10 @@ def get_pretrainer(layer, data, batch_size):
         monitoring_dataset = {'train': data},
         cost = SMD(GaussianCorruptor(0.5)),
         termination_criterion =  EpochCounter(250),
-        update_callbacks = sgd.ExponentialDecay(decay_factor=1.00001, min_lr=0.0001)
+        update_callbacks = sgd.ExponentialDecay(decay_factor=dec_fac, min_lr=0.0001)
         )
     return Train(model=layer, algorithm=train_algo, dataset=data, \
-            extensions=[sgd.MomentumAdjustor(final_momentum=0.9, start=0, saturate=80), ])
+            extensions=[sgd.MomentumAdjustor(final_momentum=0.9, start=0, saturate=200), ])
 
 def get_finetuner(model, trainset, validset=None, batch_size=100):
     train_algo = sgd.SGD(
@@ -134,7 +138,7 @@ def get_finetuner(model, trainset, validset=None, batch_size=100):
         learning_rate = 0.5,
         monitoring_batches = 100/batch_size,
         monitoring_dataset = {'train': trainset, 'valid': validset},
-        cost = costs.mlp.dropout.Dropout(input_include_prob={'h0': 0.8}, input_scales={'h0': 1.}),
+        cost = dropout.Dropout(input_include_probs={'h0': 0.8}, input_scales={'h0': 1.}),
         termination_criterion = EpochCounter(250),
         update_callbacks = sgd.ExponentialDecay(decay_factor=1.0001, min_lr=0.001)
     )
@@ -158,13 +162,12 @@ def get_output(model, data, batch_size):
     f = function([Xb], y)
     
     y = []
-    for ii in xrange(data.X.shape[0]/batch_size):
-        x_arg = data[ii*batch_size:(ii+1)*batch_size,:]
+    for ii in xrange(data.X.shape[0] // batch_size):
+        x_arg = data.X[ii*batch_size:(ii+1)*batch_size,:]
         if Xb.ndim > 2:
             x_arg = data.get_topological_view(x_arg)
         y.append(f(x_arg.astype(Xb.dtype)))
     
-    y = np.reshape(y,[data.shape[0],-1])
     y = np.concatenate(y)
     assert y.ndim == 1
     assert y.shape[0] == data.X.shape[0]
@@ -177,7 +180,7 @@ if __name__ == '__main__':
     
     # some settings
     submission = False
-    structure = [1875, 1000, 1000]
+    structure = [1875, 2000, 2000, 1000]
     batch_size = 50
     
     unsup_data, sup_data = process_data()
