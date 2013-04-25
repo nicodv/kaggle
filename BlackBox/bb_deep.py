@@ -66,7 +66,7 @@ def process_data():
 def construct_stacked_rbm(structure):
     # some RBM-universal settings
     irange = 0.05
-    init_bias = -0.5
+    init_bias = -1.
     
     grbm = rbm.GaussianBinaryRBM(
         nvis=structure[0],
@@ -125,8 +125,8 @@ def get_pretrainer(layer, data, batch_size):
         monitoring_batches = 100/batch_size,
         monitoring_dataset = {'train': data},
         cost = SMD(GaussianCorruptor(0.5)),
-        termination_criterion =  EpochCounter(250),
-        update_callbacks = sgd.ExponentialDecay(decay_factor=dec_fac, min_lr=0.0001)
+        termination_criterion =  EpochCounter(10),
+        update_callbacks = sgd.ExponentialDecay(decay_factor=dec_fac, min_lr=0.001)
         )
     return Train(model=layer, algorithm=train_algo, dataset=data, \
             extensions=[sgd.MomentumAdjustor(final_momentum=0.9, start=0, saturate=200), ])
@@ -180,7 +180,7 @@ if __name__ == '__main__':
     
     # some settings
     submission = False
-    structure = [1875, 2000, 2000, 1000]
+    structure = [1875, 3000]
     batch_size = 50
     
     unsup_data, sup_data = process_data()
