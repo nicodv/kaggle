@@ -67,6 +67,7 @@ def construct_stacked_rbm(structure):
     # some RBM-universal settings
     irange = 0.05
     init_bias = -1.
+    
     grbm = rbm.GaussianBinaryRBM(
         nvis=structure[0],
         nhid=structure[1],
@@ -90,11 +91,15 @@ def construct_stacked_rbm(structure):
 
 def construct_dbn(stackedrbm):
     layers = []
-    for ii,rbm in enumerate(stackedrbm.layers()):
-        layers.append(mlp.PretrainedLayer(
+    for ii, rbm in enumerate(stackedrbm.layers()):
+        lr_scale = 1. if ii==0 else 0.25
+        layers.append(mlp.Sigmoid(
+            dim=rbm.nhid,
             layer_name='h'+str(ii),
-            layer_content=rbm
+            irange=0.05,
+            W_lr_scale=lr_scale
         ))
+    # softmax layer at then end for classification
     layers.append(mlp.Softmax(
         #nvis=stackedrbm.layers()[-1].nhid,
         n_classes=9,
@@ -102,16 +107,17 @@ def construct_dbn(stackedrbm):
         irange=0.05,
         W_lr_scale=0.25
     ))
-    dbn = mlp.MLP(
-        layers=layers,
-        nvis=stackedrbm.layers()[0].nvis
-    )
+    dbn = mlp.MLP(layers=layers, nvis=stackedrbm.layers()[0].nvis)
+    # copy RBM weigths to DBN
+    for ii, layer in enumerate(dbn.layers):
+        layer.set_weights(stackedrbm.layers()[ii].get_weights())
+        layer.set_biases(stackedrbm.layers()[ii].bias_hid)
     return dbn
 
 def get_pretrainer(layer, data, batch_size):
     # GBRBM needs smaller learning rate for stability
     if isinstance(layer, rbm.GaussianBinaryRBM):
-        init_lr = 0.5
+        init_lr = 0.1
         dec_fac = 1.00001
     else:
         init_lr = 0.5
@@ -124,7 +130,7 @@ def get_pretrainer(layer, data, batch_size):
         monitoring_batches = 100/batch_size,
         monitoring_dataset = {'train': data},
         cost = SMD(GaussianCorruptor(0.5)),
-        termination_criterion =  EpochCounter(500),
+        termination_criterion =  EpochCounter(250),
         update_callbacks = sgd.ExponentialDecay(decay_factor=dec_fac, min_lr=0.001)
         )
     return Train(model=layer, algorithm=train_algo, dataset=data, \
@@ -137,7 +143,7 @@ def get_finetuner(model, trainset, validset=None, batch_size=100):
         learning_rate = 0.5,
         monitoring_batches = 100/batch_size,
         monitoring_dataset = {'train': trainset, 'valid': validset},
-        cost = dropout.Dropout(input_include_probs={'h0': 0.8}, input_scales={'h0': 1.}),
+        cost = dropout.Dropout(input_include_probs={'h0': 0.8}, input_scales={'h0': 1./0.8}),
         termination_criterion = EpochCounter(250),
         update_callbacks = sgd.ExponentialDecay(decay_factor=1.0001, min_lr=0.001)
     )
