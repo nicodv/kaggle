@@ -21,32 +21,42 @@ def prepare_data(d):
     d.name = d.name.map(lambda x: string.lowercase.index(x[0].lower())*900 + \
         string.lowercase.index(x[1].lower())*30 + string.lowercase.index(x[1].lower()))
     
+    # categories base on title
+    re1 = re.compile("Mr."|"Dr."|"Col."|"Major."|"Rev.")
+    re2 = re.compile("Mrs."|"Mlle."|"Don."|"Countess."|"Jonkheer.")
+    re3 = re.compile("Miss")
+    re4 = re.compile("Master.")
+    d.title1[re1.match(d.title)] = 1
+    d.title2[re2.match(d.title)] = 1
+    d.title3[re3.match(d.title)] = 1
+    d.title4[re4.match(d.title)] = 1
+    
     d.sex[d.sex=='female'] = -1
     d.sex[d.sex=='male'] = 1
     
-    d.embarked[d.embarked=='C'] = 1
-    d.embarked[d.embarked=='S'] = 2
-    d.embarked[d.embarked=='Q'] = 3
+    d.embarked1[d.embarked=='C'] = 1
+    d.embarked2[d.embarked=='S'] = 1
+    d.embarked3[d.embarked=='Q'] = 1
+    # set missings to 'S', by far the most common value. couldn't find any other clues
+    d.embarked2[d.embarked.isnull()] = 1
+    d = d.drop(['embarked'],axis=1)
     
-    d.cabin[-d.cabin.isnull()] = d.cabin[-d.cabin.isnull()].map(lambda x: x[0])
-    # D and E appear to be safe areas
+    d.cabin[~d.cabin.isnull()] = d.cabin[~d.cabin.isnull()].map(lambda x: x[0])
+    # E and D appear to be safe areas
     d.cabin[d.cabin=='E'] = 1
     d.cabin[d.cabin=='D'] = 2
     d.cabin[d.cabin=='A'] = 3
     d.cabin[d.cabin=='B'] = 3
+    d.cabin[d.cabin=='T'] = 3
     d.cabin[d.cabin=='C'] = 4
     d.cabin[d.cabin=='F'] = 5
     d.cabin[d.cabin=='G'] = 5
-    d.cabin[d.cabin=='T'] = 3
     
     cabins = d.groupby(['pclass']).cabin
     # fill with median of these groups
     f = lambda x: x.fillna(round(x.median()))
     d.cabin = cabins.transform(f)
-    
-    # 2 values are missing. set to 2, by far the most common value
-    d.embarked[d.embarked.isnull()] = 2
-    
+        
     # traveling in what sort of group? used for age
     d['member'] = np.nan
     # traveling alone
@@ -94,43 +104,29 @@ tempdata = testdata
 tempdata['train'] = 0
 totdata = totdata.append(tempdata)
 
-def select_columns(d, colnames):
-    # select columns
-    d = d[colnames]
-    
-    return d
-
 # SELECT INPUT VARIABLES HERE
-colnames = ['sex','name','pclass','farerank','age','pvar','survived']
+colnames = ['sex','name','title','pclass','farerank','age','pvar','survived']
 
-traindata = select_columns(traindata, colnames)
-testdata = select_columns(testdata, colnames[:-1])
+traindata = traindata[colnames]
+testdata = testdata[colnames[:-1]]
 
 def train_model(traindata, targets):
     
     models = [ \
-    neighbors.KNeighborsClassifier(n_neighbors=40, weights='distance', algorithm='brute', warn_on_equidistant=False), \
-    #svm.SVC(C=100, kernel='rbf', class_weight='auto'), \
-    ensemble.RandomForestClassifier(n_estimators=100, max_features='log2', \
-    compute_importances=True, oob_score=False, min_samples_split=20, criterion='entropy'), \
+    ensemble.GradientBoostingClassifier(n_estimators=50, learning_rate=0.2, \
+    max_depth=1, subsample=0.4, max_features=4, min_samples_leaf=10), \
     ensemble.GradientBoostingClassifier(n_estimators=100, learning_rate=0.2, \
-    max_depth=1, subsample=0.5, max_features=3, min_samples_leaf=10), \
+    max_depth=2, subsample=0.5, max_features=4, min_samples_leaf=10), \
     ensemble.GradientBoostingClassifier(n_estimators=200, learning_rate=0.1, \
-    max_depth=2, subsample=0.75, max_features=3, min_samples_leaf=20), \
+    max_depth=3, subsample=0.75, max_features=3, min_samples_leaf=20), \
     ensemble.GradientBoostingClassifier(n_estimators=300, learning_rate=0.05, \
-    max_depth=3, subsample=0.95, max_features=3, min_samples_leaf=30) \
+    max_depth=4, subsample=0.9, max_features=2, min_samples_leaf=30), \
+    ensemble.GradientBoostingClassifier(n_estimators=400, learning_rate=0.05, \
+    max_depth=5, subsample=0.95, max_features=2, min_samples_leaf=30) \
     ]
     
     # use StratifiedKFold, because survived 0/1 is not evenly distributed
-    cv = cross_validation.StratifiedKFold(targets, n_folds=10)
-    
-    # pipelining
-    #estimators = [('reduce_dim', PCA()), ('svm', SVC())]
-    #clf = pipeline.Pipeline(estimators)
-    
-    # access with '<estimator>__<parameter>'
-    #params = dict(reduce_dim__n_components=[2, 5, 10], svm__C=[0.1, 10, 100])
-    #gridSearch = grid_search.GridSearchCV(model, param_grid=params)
+    cv = cross_validation.StratifiedKFold(targets, n_folds=5)
     
     scores = [0]*len(models)
     for i in range(len(models)):
