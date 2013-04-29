@@ -96,6 +96,7 @@ def construct_dbn(stackedrbm):
         layers.append(mlp.Sigmoid(
             dim=rbm.nhid,
             layer_name='h'+str(ii),
+            irange=0.05,
             W_lr_scale=lr_scale
         ))
     # softmax layer at then end for classification
@@ -129,7 +130,7 @@ def get_pretrainer(layer, data, batch_size):
         monitoring_batches = 100/batch_size,
         monitoring_dataset = {'train': data},
         cost = SMD(GaussianCorruptor(0.5)),
-        termination_criterion =  EpochCounter(10),
+        termination_criterion =  EpochCounter(250),
         update_callbacks = sgd.ExponentialDecay(decay_factor=dec_fac, min_lr=0.001)
         )
     return Train(model=layer, algorithm=train_algo, dataset=data, \
