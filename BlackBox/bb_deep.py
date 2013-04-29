@@ -67,7 +67,6 @@ def construct_stacked_rbm(structure):
     # some RBM-universal settings
     irange = 0.05
     init_bias = -1.
-    
     grbm = rbm.GaussianBinaryRBM(
         nvis=structure[0],
         nhid=structure[1],
@@ -112,7 +111,7 @@ def construct_dbn(stackedrbm):
 def get_pretrainer(layer, data, batch_size):
     # GBRBM needs smaller learning rate for stability
     if isinstance(layer, rbm.GaussianBinaryRBM):
-        init_lr = 0.1
+        init_lr = 0.5
         dec_fac = 1.00001
     else:
         init_lr = 0.5
@@ -125,7 +124,7 @@ def get_pretrainer(layer, data, batch_size):
         monitoring_batches = 100/batch_size,
         monitoring_dataset = {'train': data},
         cost = SMD(GaussianCorruptor(0.5)),
-        termination_criterion =  EpochCounter(10),
+        termination_criterion =  EpochCounter(500),
         update_callbacks = sgd.ExponentialDecay(decay_factor=dec_fac, min_lr=0.001)
         )
     return Train(model=layer, algorithm=train_algo, dataset=data, \
@@ -133,7 +132,7 @@ def get_pretrainer(layer, data, batch_size):
 
 def get_finetuner(model, trainset, validset=None, batch_size=100):
     train_algo = sgd.SGD(
-        batch_size = 100,
+        batch_size = batch_size,
         init_momentum = 0.5,
         learning_rate = 0.5,
         monitoring_batches = 100/batch_size,
@@ -180,7 +179,7 @@ if __name__ == '__main__':
     
     # some settings
     submission = False
-    structure = [1875, 3000]
+    structure = [1875, 2000]
     batch_size = 50
     
     unsup_data, sup_data = process_data()
@@ -200,21 +199,22 @@ if __name__ == '__main__':
     
     # train DBN
     if submission:
-        traindata = sup_data[0]
-        validdata = sup_data[1]
-    else:
         traindata = sup_data[2]
         validdata = sup_data[2]
+    else:
+        traindata = sup_data[0]
+        validdata = sup_data[1]
     
     finetuner = get_finetuner(dbn, traindata, validdata, batch_size)
     finetuner.main_loop()
     
-    # get output
-    output = get_output(dbn, sup_data[3], batch_size)
-    
-    # create submission
-    out = open(DATA_DIR+'submission.csv', 'w')
-    for i in xrange(output.shape[0]):
-        out.write('%d.0\n' % (output[i] + 1))
-    out.close()
+    if submission:
+        # get output
+        output = get_output(dbn, sup_data[3], batch_size)
+        
+        # create submission
+        out = open(DATA_DIR+'submission.csv', 'w')
+        for i in xrange(output.shape[0]):
+            out.write('%d.0\n' % (output[i] + 1))
+        out.close()
     
