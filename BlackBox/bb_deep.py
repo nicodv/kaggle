@@ -91,11 +91,14 @@ def construct_stacked_rbm(structure):
 
 def construct_dbn(stackedrbm):
     layers = []
-    for ii,rbm in enumerate(stackedrbm.layers()):
-        layers.append(mlp.PretrainedLayer(
+    for ii, rbm in enumerate(stackedrbm.layers()):
+        lr_scale = 1. if ii==0 else 0.25
+        layers.append(mlp.Sigmoid(
+            dim=rbm.nhid,
             layer_name='h'+str(ii),
-            layer_content=rbm
+            W_lr_scale=lr_scale
         ))
+    # softmax layer at then end for classification
     layers.append(mlp.Softmax(
         #nvis=stackedrbm.layers()[-1].nhid,
         n_classes=9,
@@ -103,10 +106,11 @@ def construct_dbn(stackedrbm):
         irange=0.05,
         W_lr_scale=0.25
     ))
-    dbn = mlp.MLP(
-        layers=layers,
-        nvis=stackedrbm.layers()[0].nvis
-    )
+    dbn = mlp.MLP(layers=layers, nvis=stackedrbm.layers()[0].nvis)
+    # copy RBM weigths to DBN
+    for ii, layer in enumerate(dbn.layers):
+        layer.set_weights(stackedrbm.layers()[ii].get_weights())
+        layer.set_biases(stackedrbm.layers()[ii].bias_hid)
     return dbn
 
 def get_pretrainer(layer, data, batch_size):
@@ -133,12 +137,12 @@ def get_pretrainer(layer, data, batch_size):
 
 def get_finetuner(model, trainset, validset=None, batch_size=100):
     train_algo = sgd.SGD(
-        batch_size = 100,
+        batch_size = batch_size,
         init_momentum = 0.5,
         learning_rate = 0.5,
         monitoring_batches = 100/batch_size,
         monitoring_dataset = {'train': trainset, 'valid': validset},
-        cost = dropout.Dropout(input_include_probs={'h0': 0.8}, input_scales={'h0': 1.}),
+        cost = dropout.Dropout(input_include_probs={'h0': 0.8}, input_scales={'h0': 1./0.8}),
         termination_criterion = EpochCounter(250),
         update_callbacks = sgd.ExponentialDecay(decay_factor=1.0001, min_lr=0.001)
     )
@@ -195,8 +199,7 @@ if __name__ == '__main__':
         trainer.main_loop()
     
     # construct DBN
-    # (necessary to convert RBM layers to sigmoid layers for dropout?)
-    dbn = construct_dbn(stackedrbm)
+    dbn = construct_dbn(stackedrbm, dropout=True)
     
     # train DBN
     if submission:
