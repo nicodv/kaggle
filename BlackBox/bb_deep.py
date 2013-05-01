@@ -30,7 +30,9 @@ DATA_DIR = '/home/nico/datasets/Kaggle/BlackBox/'
 
 def process_data():
     # pre-process unsupervised data
-    if not os.path.exists(DATA_DIR+'preprocess.pkl') or not os.path.exists(DATA_DIR+'unsup_prep_data.pkl'):
+    if not os.path.exists(DATA_DIR+'preprocess.pkl') \
+    or not os.path.exists(DATA_DIR+'unsup_prep_data.pkl') \
+    or not os.path.exists(DATA_DIR+'sup_prep_data.pkl'):
         unsup_data = black_box_dataset.BlackBoxDataset('extra')
         pipeline = preprocessing.Pipeline()
         pipeline.items.append(preprocessing.Standardize(global_mean=False, global_std=False))
@@ -43,30 +45,33 @@ def process_data():
         out = open(DATA_DIR+'unsup_prep_data.pkl', 'w')
         pickle.dump(unsup_data, out)
         out.close()
+        
+        # process supervised training data
+        sup_data = []
+        which_data = ['train']*3 + ['public_test']
+        starts = [0, 800, None, None]
+        stops = [800, 1000, None, None]
+        for curstr, start, stop in zip(which_data, starts, stops):
+            sup_data.append(black_box_dataset.BlackBoxDataset(
+            which_set=curstr,
+            start=start,
+            stop=stop,
+            preprocessor=pipeline
+            ))
+        serial.save(DATA_DIR+'sup_prep_data.pkl', sup_data)
+        
     else:
         pipeline = serial.load(DATA_DIR+'preprocess.pkl')
         #unsup_data = serial.load(DATA_DIR+'unsup_prep_data.pkl')
         unsup_data = pickle.load(open(DATA_DIR+'unsup_prep_data.pkl', 'r'))
-    
-    # process supervised training data
-    sup_data = []
-    which_data = ['train']*3 + ['public_test']
-    starts = [0, 800, None, None]
-    stops = [800, 1000, None, None]
-    for curstr, start, stop in zip(which_data, starts, stops):
-        sup_data.append(black_box_dataset.BlackBoxDataset(
-        which_set=curstr,
-        start=start,
-        stop=stop,
-        preprocessor=pipeline
-        ))
+        sup_data = serial.load(DATA_DIR+'sup_prep_data.pkl')
     
     return unsup_data, sup_data
 
 def construct_stacked_rbm(structure):
     # some RBM-universal settings
     irange = 0.05
-    init_bias = -1.
+    init_bias = 0.25
     
     grbm = rbm.GaussianBinaryRBM(
         nvis=structure[0],
@@ -109,19 +114,19 @@ def construct_dbn(stackedrbm):
     ))
     dbn = mlp.MLP(layers=layers, nvis=stackedrbm.layers()[0].nvis)
     # copy RBM weigths to DBN
-    for ii, layer in enumerate(dbn.layers):
-        layer.set_weights(stackedrbm.layers()[ii].get_weights())
-        layer.set_biases(stackedrbm.layers()[ii].bias_hid)
+    for ii, layer in enumerate(stackedrbm.layers()):
+        dbn.layers[ii].set_weights(layer.get_weights())
+        dbn.layers[ii].set_biases(layer.bias_hid.get_value(borrow=False))
     return dbn
 
 def get_pretrainer(layer, data, batch_size):
     # GBRBM needs smaller learning rate for stability
     if isinstance(layer, rbm.GaussianBinaryRBM):
         init_lr = 0.1
-        dec_fac = 1.00001
+        dec_fac = 1.000005
     else:
         init_lr = 0.5
-        dec_fac = 1.00001
+        dec_fac = 1.000005
     
     train_algo = sgd.SGD(
         batch_size = batch_size,
@@ -130,11 +135,11 @@ def get_pretrainer(layer, data, batch_size):
         monitoring_batches = 100/batch_size,
         monitoring_dataset = {'train': data},
         cost = SMD(GaussianCorruptor(0.5)),
-        termination_criterion =  EpochCounter(250),
+        termination_criterion =  EpochCounter(500),
         update_callbacks = sgd.ExponentialDecay(decay_factor=dec_fac, min_lr=0.001)
         )
     return Train(model=layer, algorithm=train_algo, dataset=data, \
-            extensions=[sgd.MomentumAdjustor(final_momentum=0.9, start=0, saturate=200), ])
+            extensions=[sgd.MomentumAdjustor(final_momentum=0.9, start=0, saturate=400), ])
 
 def get_finetuner(model, trainset, validset=None, batch_size=100):
     train_algo = sgd.SGD(
@@ -178,6 +183,7 @@ def get_output(model, data, batch_size):
     assert y.shape[0] == data.X.shape[0]
     # discard any zero-padding that was used to give the batches uniform size
     y = y[:m]
+    data.X = data.X[:m]
     
     return y
 
@@ -185,12 +191,13 @@ if __name__ == '__main__':
     
     # some settings
     submission = False
-    structure = [1875, 2000]
+    structure = [1875, 2000, 2000]
     batch_size = 50
     
     unsup_data, sup_data = process_data()
     
     stackedrbm = construct_stacked_rbm(structure)
+    #stackedrbm = serial.load(DATA_DIR+'gbrbm_pretrained.pkl')
     
     # pre-train model
     for ii, layer in enumerate(stackedrbm.layers()):
@@ -200,7 +207,6 @@ if __name__ == '__main__':
         trainer.main_loop()
     
     # construct DBN
-    # (necessary to convert RBM layers to sigmoid layers for dropout?)
     dbn = construct_dbn(stackedrbm)
     
     # train DBN
