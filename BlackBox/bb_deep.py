@@ -70,19 +70,19 @@ def process_data():
 
 def construct_stacked_rbm(structure):
     # some RBM-universal settings
-    irange = 0.05
-    init_bias = 0.25
+    irange = 0.5
+    init_bias = 0.
     
     grbm = rbm.GaussianBinaryRBM(
         nvis=structure[0],
         nhid=structure[1],
         irange=irange,
         energy_function_class=GRBM_Type_1,
-        learn_sigma=True,
+        learn_sigma=False,
         init_sigma=1.,
         init_bias_hid=init_bias,
         mean_vis=True,
-        sigma_lr_scale=0.1
+        sigma_lr_scale=1.
     )
     rbms = []
     for vsize,hsize in zip(structure[1:-1], structure[2:]):
@@ -101,7 +101,7 @@ def construct_dbn(stackedrbm):
         layers.append(mlp.Sigmoid(
             dim=rbm.nhid,
             layer_name='h'+str(ii),
-            irange=0.05,
+            irange=0.5,
             W_lr_scale=lr_scale
         ))
     # softmax layer at then end for classification
@@ -109,7 +109,7 @@ def construct_dbn(stackedrbm):
         #nvis=stackedrbm.layers()[-1].nhid,
         n_classes=9,
         layer_name='y',
-        irange=0.05,
+        irange=0.5,
         W_lr_scale=0.25
     ))
     dbn = mlp.MLP(layers=layers, nvis=stackedrbm.layers()[0].nvis)
