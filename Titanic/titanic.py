@@ -1,35 +1,38 @@
 import numpy as np
 import pandas as pd
+import re
 import string
 from sklearn import cross_validation, ensemble, pipeline, \
             grid_search, metrics, svm, preprocessing, neighbors, decomposition
 
 DATA_DIR = '/home/nico/datasets/Kaggle/Titanic/'
 
-traindata = pd.read_csv(DATA_DIR+'train.csv')
-testdata = pd.read_csv(DATA_DIR+'test.csv')
+def families(train, test):
+    trainr = train[['name','parch','sibsp','survived']]
+    testr = test[['name','parch','sibsp']]
+    testr['survived'] = 0.5
+    tot = pd.concat(trainr, testr)
+    tot['fvar'] = tot.parch. + tot.sibsp
+    tot = tot.drop(['parch','sibsp'], axis=1)
+    # find family name (at start, everything before comma)
+    fnre = re.compile('^(.+?),')
+    tot['famname'] = tot.name.map(lambda x: fnre.find(x))
+    # survival chance = mean of rest of family
+    survived = tot.groupby(['famname','fvar']).survived
+    survived = survived()
+    f = lambda x: x.fillna(round(x.mean()))
+    tot['famscore'] = survived.transform(f)
+    # wait, loners shouldn't look at other loners
+    tot.famscore[tot.fvar==0] = 0.5
+    
+    train = pd.merge(train, tot[['famname','fvar','famscore']], how='left', on=['famname','fvar'])
+    test = pd.merge(test, tot[['famname','fvar','famscore']], how='left', on=['famname','fvar'])
+    return train, test
 
 def prepare_data(d):
     
     # delete unused columns
     d = d.drop(['ticket'],axis=1)
-    
-    # convert nominal data to integers
-    # simple encoding of first 3 characters of name
-    d.name = d.name.map(lambda x: x[:3])
-    d.name = d.name.map(lambda x: x.replace("'",'z'))
-    d.name = d.name.map(lambda x: string.lowercase.index(x[0].lower())*900 + \
-        string.lowercase.index(x[1].lower())*30 + string.lowercase.index(x[1].lower()))
-    
-    # categories base on title
-    re1 = re.compile("Mr."|"Dr."|"Col."|"Major."|"Rev.")
-    re2 = re.compile("Mrs."|"Mlle."|"Don."|"Countess."|"Jonkheer.")
-    re3 = re.compile("Miss")
-    re4 = re.compile("Master.")
-    d.title1[re1.match(d.title)] = 1
-    d.title2[re2.match(d.title)] = 1
-    d.title3[re3.match(d.title)] = 1
-    d.title4[re4.match(d.title)] = 1
     
     d.sex[d.sex=='female'] = -1
     d.sex[d.sex=='male'] = 1
@@ -39,7 +42,24 @@ def prepare_data(d):
     d.embarked3[d.embarked=='Q'] = 1
     # set missings to 'S', by far the most common value. couldn't find any other clues
     d.embarked2[d.embarked.isnull()] = 1
+    d.embarked1 = d.embarked1.fillna(0)
+    d.embarked2 = d.embarked2.fillna(0)
+    d.embarked3 = d.embarked3.fillna(0)
     d = d.drop(['embarked'],axis=1)
+    
+    # categories based on title in name
+    re1 = re.compile("Mr."|"Dr."|"Col."|"Major."|"Rev.")
+    re2 = re.compile("Mrs."|"Mlle."|"Don."|"Countess."|"Jonkheer.")
+    re3 = re.compile("Miss.")
+    re4 = re.compile("Master.")
+    d.title1[re1.match(d.name)] = 1
+    d.title2[re2.match(d.name)] = 1
+    d.title3[re3.match(d.name)] = 1
+    d.title4[re4.match(d.name)] = 1
+    d.title1 = d.title1.fillna(0)
+    d.title2 = d.title2.fillna(0)
+    d.title3 = d.title3.fillna(0)
+    d.title4 = d.title4.fillna(0)
     
     d.cabin[~d.cabin.isnull()] = d.cabin[~d.cabin.isnull()].map(lambda x: x[0])
     # E and D appear to be safe areas
@@ -70,43 +90,35 @@ def prepare_data(d):
     # other
     d.member[((d.sibsp < 2) & (d.parch == 1))] = 5
     
-    d['companions'] = np.log(d.sibsp + d.parch + 1)
-    
     # fill missing values
     ages = d.groupby(['sex','member']).age
     # fill with median of these groups
     f = lambda x: x.fillna(x.median())
     d.age = ages.transform(f)
     
-    # fill that one missing value
-    d.fare = d.fare.fillna(0)
     # median price per class (above threshold for lucky cheapos)
     fares = d.groupby(['pclass','embarked']).fare
-    f = lambda x: x.fillna(x.median()) / x.median()
+    f = lambda x: x.fillna(x.median())
     d.fare = fares.transform(f)
     
     # now rank the fares
     d['farerank'] = d.fare.rank() / len(d.fare)
-    d['status'] = d.pclass - d.farerank
     
     # create some new combined features
-    d['sexage'] = d.sex * d.age
     d['pvar'] = d.parch+1 * d.sibsp+1
-    d['agepvar'] = d.age / np.sqrt(d.pvar)
     
     return d
 
+traindata = pd.read_csv(DATA_DIR+'train.csv')
+testdata = pd.read_csv(DATA_DIR+'test.csv')
+
+traindata, testdata = families(traindata, testdata)
+
 traindata = prepare_data(traindata)
 testdata = prepare_data(testdata)
-totdata = traindata
-totdata['train'] = 1
-tempdata = testdata
-tempdata['train'] = 0
-totdata = totdata.append(tempdata)
 
 # SELECT INPUT VARIABLES HERE
-colnames = ['sex','name','title','pclass','farerank','age','pvar','survived']
-
+colnames = ['sex','title','pclass','farerank','age','pvar','famscore','survived']
 traindata = traindata[colnames]
 testdata = testdata[colnames[:-1]]
 
@@ -140,7 +152,6 @@ def train_model(traindata, targets):
         
     return models
 
-
 Fmask = (traindata.sex==-1)
 traindataF = traindata.drop(Fmask[Fmask==False].index)
 traindataM = traindata.drop(Fmask[Fmask==True].index)
@@ -170,7 +181,7 @@ def preproc(d):
     return d, meand, stdd
 
 for i in colnames:
-    if (i != 'sex') & (i != 'survived'):
+    if i in ('pvar','age','farerank','famscore'):
         traindataF[i], meand, stdd = preproc(traindataF[i])
         testdataF[i] = testdataF[i].map(lambda x: (x - meand) / stdd)
         traindataM[i], meand, stdd = preproc(traindataM[i])
@@ -198,12 +209,6 @@ for i in range(len(modelsM)):
 predM = pd.DataFrame(prediction).median().astype(int)
 
 predtot[Fmask[Fmask==False].index.tolist()] = predM
-
-# export
-totdata.survived[totdata.train==0] = predtot
-totdata.to_csv(DATA_DIR+'rawdata.txt', sep=',', header=True, index=False)
-
-print("Fraction survivors: %d / %d" % (sum(predtot), len(predtot)))
 
 # save to CSV
 predtot.to_csv(DATA_DIR+'submission.csv', sep=',', header=False, index=False)
