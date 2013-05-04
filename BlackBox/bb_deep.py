@@ -36,7 +36,7 @@ def process_data():
         unsup_data = black_box_dataset.BlackBoxDataset('extra')
         pipeline = preprocessing.Pipeline()
         pipeline.items.append(preprocessing.Standardize(global_mean=False, global_std=False))
-        pipeline.items.append(preprocessing.ZCA(filter_bias=.1))
+        #pipeline.items.append(preprocessing.ZCA(filter_bias=.1))
         unsup_data.apply_preprocessor(preprocessor=pipeline, can_fit=True)
         serial.save(DATA_DIR+'preprocess.pkl', pipeline)
         
@@ -51,12 +51,14 @@ def process_data():
         which_data = ['train']*3 + ['public_test']
         starts = [0, 800, None, None]
         stops = [800, 1000, None, None]
-        for curstr, start, stop in zip(which_data, starts, stops):
+        fits = [False, False, False, False]
+        for curstr, start, stop, fit in zip(which_data, starts, stops, fits):
             sup_data.append(black_box_dataset.BlackBoxDataset(
             which_set=curstr,
             start=start,
             stop=stop,
-            preprocessor=pipeline
+            preprocessor=pipeline,
+            fit_preprocessor=fit
             ))
         serial.save(DATA_DIR+'sup_prep_data.pkl', sup_data)
         
@@ -81,7 +83,7 @@ def construct_stacked_rbm(structure):
         learn_sigma=False,
         init_sigma=1.,
         init_bias_hid=init_bias,
-        mean_vis=True,
+        mean_vis=False,
         sigma_lr_scale=1.
     )
     rbms = []
@@ -122,7 +124,7 @@ def construct_dbn(stackedrbm):
 def get_pretrainer(layer, data, batch_size):
     # GBRBM needs smaller learning rate for stability
     if isinstance(layer, rbm.GaussianBinaryRBM):
-        init_lr = 0.1
+        init_lr = 0.5
         dec_fac = 1.000005
     else:
         init_lr = 0.5
@@ -205,7 +207,7 @@ if __name__ == '__main__':
                                                 transformer=StackedBlocks(stackedrbm.layers()[:ii]))
         trainer = get_pretrainer(layer, utraindata, batch_size)
         trainer.main_loop()
-    
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
     # construct DBN
     dbn = construct_dbn(stackedrbm)
     
@@ -230,3 +232,4 @@ if __name__ == '__main__':
             out.write('%d.0\n' % (output[i] + 1))
         out.close()
     
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            

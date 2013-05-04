@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 import re
-import string
 from sklearn import cross_validation, ensemble, pipeline, \
             grid_search, metrics, svm, preprocessing, neighbors, decomposition
 
@@ -9,24 +8,25 @@ DATA_DIR = '/home/nico/datasets/Kaggle/Titanic/'
 
 def families(train, test):
     trainr = train[['name','parch','sibsp','survived']]
+    trainr['ind'] = trainr.index
     testr = test[['name','parch','sibsp']]
-    testr['survived'] = 0.5
-    tot = pd.concat(trainr, testr)
-    tot['fvar'] = tot.parch. + tot.sibsp
+    testr['ind'] = testr.index + 10000
+    tot = pd.concat([trainr, testr]).reset_index()
+    tot['fvar'] = tot.parch + tot.sibsp
     tot = tot.drop(['parch','sibsp'], axis=1)
     # find family name (at start, everything before comma)
     fnre = re.compile('^(.+?),')
-    tot['famname'] = tot.name.map(lambda x: fnre.find(x))
+    tot['famname'] = tot.name.map(lambda x: fnre.search(x).group()[:-1])
     # survival chance = mean of rest of family
     survived = tot.groupby(['famname','fvar']).survived
-    survived = survived()
-    f = lambda x: x.fillna(round(x.mean()))
+    f = lambda x: x.fillna(x.mean())
     tot['famscore'] = survived.transform(f)
     # wait, loners shouldn't look at other loners
-    tot.famscore[tot.fvar==0] = 0.5
+    tot.famscore[tot.fvar==0] = np.nan
+    tot.famscore = tot.famscore.fillna(0.5)
     
-    train = pd.merge(train, tot[['famname','fvar','famscore']], how='left', on=['famname','fvar'])
-    test = pd.merge(test, tot[['famname','fvar','famscore']], how='left', on=['famname','fvar'])
+    train['famscore'] = pd.merge(trainr,tot[['ind','famscore']], how='left', on='ind')['famscore']
+    test['famscore'] = pd.merge(testr,tot[['ind','famscore']], how='left', on='ind')['famscore']
     return train, test
 
 def prepare_data(d):
@@ -37,29 +37,24 @@ def prepare_data(d):
     d.sex[d.sex=='female'] = -1
     d.sex[d.sex=='male'] = 1
     
+    d['embarked1'] = 0
+    d['embarked2'] = 0
+    d['embarked3'] = 0
     d.embarked1[d.embarked=='C'] = 1
     d.embarked2[d.embarked=='S'] = 1
     d.embarked3[d.embarked=='Q'] = 1
     # set missings to 'S', by far the most common value. couldn't find any other clues
     d.embarked2[d.embarked.isnull()] = 1
-    d.embarked1 = d.embarked1.fillna(0)
-    d.embarked2 = d.embarked2.fillna(0)
-    d.embarked3 = d.embarked3.fillna(0)
-    d = d.drop(['embarked'],axis=1)
     
     # categories based on title in name
-    re1 = re.compile("Mr."|"Dr."|"Col."|"Major."|"Rev.")
-    re2 = re.compile("Mrs."|"Mlle."|"Don."|"Countess."|"Jonkheer.")
+    re1 = re.compile("Mr.|Dr.|Col.|Major.|Rev.")
+    re2 = re.compile("Mrs.|Mlle.|Don.|Countess.|Jonkheer.")
     re3 = re.compile("Miss.")
     re4 = re.compile("Master.")
-    d.title1[re1.match(d.name)] = 1
-    d.title2[re2.match(d.name)] = 1
-    d.title3[re3.match(d.name)] = 1
-    d.title4[re4.match(d.name)] = 1
-    d.title1 = d.title1.fillna(0)
-    d.title2 = d.title2.fillna(0)
-    d.title3 = d.title3.fillna(0)
-    d.title4 = d.title4.fillna(0)
+    d['title1'] = d.name.map(lambda x: int(bool(re1.search(x))))
+    d['title2'] = d.name.map(lambda x: int(bool(re2.search(x))))
+    d['title3'] = d.name.map(lambda x: int(bool(re3.search(x))))
+    d['title4'] = d.name.map(lambda x: int(bool(re4.search(x))))
     
     d.cabin[~d.cabin.isnull()] = d.cabin[~d.cabin.isnull()].map(lambda x: x[0])
     # E and D appear to be safe areas
@@ -76,7 +71,7 @@ def prepare_data(d):
     # fill with median of these groups
     f = lambda x: x.fillna(round(x.median()))
     d.cabin = cabins.transform(f)
-        
+    
     # traveling in what sort of group? used for age
     d['member'] = np.nan
     # traveling alone
@@ -98,6 +93,7 @@ def prepare_data(d):
     
     # median price per class (above threshold for lucky cheapos)
     fares = d.groupby(['pclass','embarked']).fare
+    d = d.drop(['embarked'],axis=1)
     f = lambda x: x.fillna(x.median())
     d.fare = fares.transform(f)
     
@@ -118,7 +114,8 @@ traindata = prepare_data(traindata)
 testdata = prepare_data(testdata)
 
 # SELECT INPUT VARIABLES HERE
-colnames = ['sex','title','pclass','farerank','age','pvar','famscore','survived']
+colnames = ['sex','pclass','farerank','age', \
+            'pvar','famscore','survived']
 traindata = traindata[colnames]
 testdata = testdata[colnames[:-1]]
 
