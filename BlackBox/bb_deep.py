@@ -100,7 +100,7 @@ def construct_dbn(stackedrbm):
     layers = []
     for ii, rbm in enumerate(stackedrbm.layers()):
         lr_scale = 1. if ii==0 else 0.25
-        layers.append(mlp.Sigmoid(
+        layers.append(mlp.RectifiedLinear(
             dim=rbm.nhid,
             layer_name='h'+str(ii),
             irange=0.5,
@@ -137,11 +137,11 @@ def get_pretrainer(layer, data, batch_size):
         monitoring_batches = 100/batch_size,
         monitoring_dataset = {'train': data},
         cost = SMD(GaussianCorruptor(0.5)),
-        termination_criterion =  EpochCounter(500),
+        termination_criterion =  EpochCounter(1),
         update_callbacks = sgd.ExponentialDecay(decay_factor=dec_fac, min_lr=0.001)
         )
     return Train(model=layer, algorithm=train_algo, dataset=data, \
-            extensions=[sgd.MomentumAdjustor(final_momentum=0.9, start=0, saturate=400), ])
+            extensions=[sgd.MomentumAdjustor(final_momentum=0.9, start=0, saturate=5), ])
 
 def get_finetuner(model, trainset, validset=None, batch_size=100):
     train_algo = sgd.SGD(
@@ -232,4 +232,3 @@ if __name__ == '__main__':
             out.write('%d.0\n' % (output[i] + 1))
         out.close()
     
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
