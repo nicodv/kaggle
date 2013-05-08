@@ -15,6 +15,8 @@ import pylearn2.models.rbm as rbm
 from pylearn2.energy_functions.rbm_energy import GRBM_Type_1
 from pylearn2.base import StackedBlocks
 import pylearn2.models.mlp as mlp
+import pylearn2.models.autoencoder as autoencoder
+import pylearn2.models.sparse_autoencoder as sparse_autoencoder
 from pylearn2.models.softmax_regression import SoftmaxRegression
 
 from pylearn2.train import Train
@@ -22,7 +24,7 @@ import pylearn2.training_algorithms.sgd as sgd
 from pylearn2.termination_criteria import EpochCounter
 import pylearn2.costs as costs
 import pylearn2.costs.mlp.dropout as dropout
-from pylearn2.corruption import GaussianCorruptor
+from pylearn2.corruption import GaussianCorruptor, BinomialCorruptor
 from pylearn2.costs.ebm_estimation import SMD, NCE
 from pylearn2.distributions.mnd import MND
 
@@ -96,12 +98,29 @@ def construct_stacked_rbm(structure):
         ))
     return StackedBlocks([grbm] + rbms)
 
-def construct_dbn(stackedrbm):
+def construct_sdae(structure):
+    # some settings
+    irange = 0.5
+    init_bias = 0.
+    
     layers = []
-    for ii, rbm in enumerate(stackedrbm.layers()):
+    for vsize,hsize in zip(structure[:-1], structure[1:]):
+        layers.append(sparse_autoencoder.SparseDenoisingAutoencoder(
+            corruptor=BinomialCorruptor(0.5),
+            nvis=vsize,
+            nhid=hsize,
+            act_enc=sparse_autoencoder.Rectify(),
+            act_dec=sparse_autoencoder.Rectify(),
+            irange=irange
+        ))
+    return StackedBlocks(layers)
+
+def construct_dbn_from_stack(stack):
+    layers = []
+    for ii, layer in enumerate(stack.layers()):
         lr_scale = 1. if ii==0 else 0.25
         layers.append(mlp.RectifiedLinear(
-            dim=rbm.nhid,
+            dim=layer.nhid,
             layer_name='h'+str(ii),
             irange=0.5,
             W_lr_scale=lr_scale
@@ -114,15 +133,18 @@ def construct_dbn(stackedrbm):
         irange=0.5,
         W_lr_scale=0.25
     ))
-    dbn = mlp.MLP(layers=layers, nvis=stackedrbm.layers()[0].nvis)
-    # copy RBM weigths to DBN
-    for ii, layer in enumerate(stackedrbm.layers()):
+    dbn = mlp.MLP(layers=layers, nvis=stack.layers()[0].nvis)
+    # copy weigths to DBN
+    for ii, layer in enumerate(stack.layers()):
         dbn.layers[ii].set_weights(layer.get_weights())
-        dbn.layers[ii].set_biases(layer.bias_hid.get_value(borrow=False))
+        if isinstance(layer, rbm.RBM):
+            dbn.layers[ii].set_biases(layer.bias_hid.get_value(borrow=False))
+        elif isinstance(layer, autoencoder.AutoEncoder):
+            dbn.layers[ii].set_biases(layer.hidbias.get_value(borrow=False))
     return dbn
 
 def get_pretrainer(layer, data, batch_size):
-    # GBRBM needs smaller learning rate for stability
+    # GBRBM needs smaller learning rate for stability?
     if isinstance(layer, rbm.GaussianBinaryRBM):
         init_lr = 0.5
         dec_fac = 1.000005
