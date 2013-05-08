@@ -114,8 +114,8 @@ traindata = prepare_data(traindata)
 testdata = prepare_data(testdata)
 
 # SELECT INPUT VARIABLES HERE
-colnames = ['sex','pclass','farerank','age', \
-            'pvar','famscore','survived']
+colnames = ['pclass','farerank','age','pvar','famscore','survived']
+
 traindata = traindata[colnames]
 testdata = testdata[colnames[:-1]]
 
@@ -149,26 +149,6 @@ def train_model(traindata, targets):
         
     return models
 
-Fmask = (traindata.sex==-1)
-traindataF = traindata.drop(Fmask[Fmask==False].index)
-traindataM = traindata.drop(Fmask[Fmask==True].index)
-traindataF.reset_index(inplace=True)
-traindataM.reset_index(inplace=True)
-del traindataF['sex']
-del traindataM['sex']
-targetsF = traindataF.survived
-targetsM = traindataM.survived
-del traindataF['survived']
-del traindataM['survived']
-
-Fmask = (testdata.sex==-1)
-testdataF = testdata.drop(Fmask[Fmask==False].index)
-testdataM = testdata.drop(Fmask[Fmask==True].index)
-testdataM.reset_index(inplace=True)
-traindataM.reset_index(inplace=True)
-del testdataF['sex']
-del testdataM['sex']
-
 # preprocessing
 def preproc(d):
     meand = d.mean()
@@ -179,33 +159,17 @@ def preproc(d):
 
 for i in colnames:
     if i in ('pvar','age','farerank','famscore'):
-        traindataF[i], meand, stdd = preproc(traindataF[i])
-        testdataF[i] = testdataF[i].map(lambda x: (x - meand) / stdd)
-        traindataM[i], meand, stdd = preproc(traindataM[i])
-        testdataM[i] = testdataM[i].map(lambda x: (x - meand) / stdd)
+        traindata[i], meand, stdd = preproc(traindata[i])
+        testdata[i] = testdata[i].map(lambda x: (x - meand) / stdd)
 
-modelsF = train_model(traindataF[colnames[1:-1]], targetsF)
-modelsM = train_model(traindataM[colnames[1:-1]], targetsM)
+models = train_model(traindata[colnames[:-1]], targets)
 
 # make prediction
-prediction = [[0]*418 for i in range(len(modelsF))]
-for i in range(len(modelsF)):
-    prediction[i] = modelsF[i].predict(testdataF[colnames[1:-1]]).tolist()
+prediction = [[0]*418 for i in range(len(models))]
+for i in range(len(models)):
+    prediction[i] = models[i].predict(testdata[colnames[:-1]]).tolist()
 
-predF = pd.DataFrame(prediction).median().astype(int)
-
-predtot = [0]*418
-predtot = pd.Series(predtot)
-
-predtot[Fmask[Fmask==True].index.tolist()] = predF
-
-prediction = [[0]*418 for i in range(len(modelsM))]
-for i in range(len(modelsM)):
-    prediction[i] = modelsM[i].predict(testdataM[colnames[1:-1]]).tolist()
-
-predM = pd.DataFrame(prediction).median().astype(int)
-
-predtot[Fmask[Fmask==False].index.tolist()] = predM
+pred = pd.DataFrame(prediction).median().astype(int)
 
 # save to CSV
-predtot.to_csv(DATA_DIR+'submission.csv', sep=',', header=False, index=False)
+pred.to_csv(DATA_DIR+'submission.csv', sep=',', header=False, index=False)
