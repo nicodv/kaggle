@@ -207,7 +207,7 @@ if __name__ == '__main__':
                                                 transformer=StackedBlocks(stackedrbm.layers()[:ii]))
         trainer = get_pretrainer(layer, utraindata, batch_size)
         trainer.main_loop()
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+    
     # construct DBN
     dbn = construct_dbn(stackedrbm)
     
