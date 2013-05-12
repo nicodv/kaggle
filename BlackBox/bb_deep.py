@@ -23,6 +23,7 @@ from pylearn2.train import Train
 import pylearn2.training_algorithms.sgd as sgd
 from pylearn2.termination_criteria import EpochCounter
 import pylearn2.costs as costs
+from pylearn2.costs.autoencoder import MeanBinaryCrossEntropy, MeanSquaredReconstructionError
 import pylearn2.costs.mlp.dropout as dropout
 from pylearn2.corruption import GaussianCorruptor, BinomialCorruptor
 from pylearn2.costs.ebm_estimation import SMD, NCE
@@ -98,52 +99,73 @@ def construct_stacked_rbm(structure):
         ))
     return StackedBlocks([grbm] + rbms)
 
-def construct_sdae(structure):
+def construct_ae(structure):
     # some settings
-    irange = 0.5
-    init_bias = 0.
+    irange = 0.05
     
     layers = []
     for vsize,hsize in zip(structure[:-1], structure[1:]):
-        layers.append(sparse_autoencoder.SparseDenoisingAutoencoder(
+        layers.append(autoencoder.DenoisingAutoencoder(
             corruptor=BinomialCorruptor(0.5),
             nvis=vsize,
             nhid=hsize,
-            act_enc=sparse_autoencoder.Rectify(),
-            act_dec=sparse_autoencoder.Rectify(),
+            tied_weights=True,
+            act_enc='sigmoid',
+            act_dec='sigmoid',
             irange=irange
         ))
     return StackedBlocks(layers)
 
 def construct_dbn_from_stack(stack):
+    # some settings
+    irange = 0.05
+    
     layers = []
     for ii, layer in enumerate(stack.layers()):
         lr_scale = 1. if ii==0 else 0.25
-        layers.append(mlp.RectifiedLinear(
+        layers.append(mlp.Sigmoid(
             dim=layer.nhid,
             layer_name='h'+str(ii),
-            irange=0.5,
-            W_lr_scale=lr_scale
+            irange=irange,
+            W_lr_scale=lr_scale,
+            max_col_norm=2.
         ))
     # softmax layer at then end for classification
     layers.append(mlp.Softmax(
         #nvis=stackedrbm.layers()[-1].nhid,
         n_classes=9,
         layer_name='y',
-        irange=0.5,
+        irange=irange,
         W_lr_scale=0.25
     ))
-    dbn = mlp.MLP(layers=layers, nvis=stack.layers()[0].nvis)
+    dbn = mlp.MLP(layers=layers, nvis=stack.layers()[0].get_input_space().dim)
     # copy weigths to DBN
     for ii, layer in enumerate(stack.layers()):
         dbn.layers[ii].set_weights(layer.get_weights())
         if isinstance(layer, rbm.RBM):
             dbn.layers[ii].set_biases(layer.bias_hid.get_value(borrow=False))
-        elif isinstance(layer, autoencoder.AutoEncoder):
+        elif isinstance(layer, autoencoder.Autoencoder):
             dbn.layers[ii].set_biases(layer.hidbias.get_value(borrow=False))
     return dbn
 
-def get_pretrainer(layer, data, batch_size):
+def get_ae_pretrainer(layer, data, batch_size):
+    init_lr = 0.05
+    dec_fac = 1.0001
+    
+    train_algo = sgd.SGD(
+        batch_size = batch_size,
+        learning_rate = init_lr,
+        init_momentum = 0.5,
+        monitoring_batches = 100/batch_size,
+        monitoring_dataset = {'train': data},
+        cost = MeanSquaredReconstructionError(),
+        termination_criterion =  EpochCounter(20),
+        update_callbacks = sgd.ExponentialDecay(decay_factor=dec_fac, min_lr=0.001)
+        )
+    return Train(model=layer, algorithm=train_algo, dataset=data, \
+            extensions=[sgd.MomentumAdjustor(final_momentum=0.9, start=0, saturate=5), ])
+
+def get_rbm_pretrainer(layer, data, batch_size):
     # GBRBM needs smaller learning rate for stability?
     if isinstance(layer, rbm.GaussianBinaryRBM):
         init_lr = 0.5
@@ -159,7 +181,7 @@ def get_pretrainer(layer, data, batch_size):
         monitoring_batches = 100/batch_size,
         monitoring_dataset = {'train': data},
         cost = SMD(GaussianCorruptor(0.5)),
-        termination_criterion =  EpochCounter(1),
+        termination_criterion =  EpochCounter(5),
         update_callbacks = sgd.ExponentialDecay(decay_factor=dec_fac, min_lr=0.001)
         )
     return Train(model=layer, algorithm=train_algo, dataset=data, \
@@ -173,11 +195,11 @@ def get_finetuner(model, trainset, validset=None, batch_size=100):
         monitoring_batches = 100/batch_size,
         monitoring_dataset = {'train': trainset, 'valid': validset},
         cost = dropout.Dropout(input_include_probs={'h0': 0.8}, input_scales={'h0': 1./0.8}),
-        termination_criterion = EpochCounter(250),
+        termination_criterion = EpochCounter(200),
         update_callbacks = sgd.ExponentialDecay(decay_factor=1.0001, min_lr=0.001)
     )
     return Train(model=model, algorithm=train_algo, dataset=trainset, save_freq=0, \
-            extensions=[sgd.MomentumAdjustor(final_momentum=0.9, start=0, saturate=200), ])
+            extensions=[sgd.MomentumAdjustor(final_momentum=0.9, start=0, saturate=150), ])
 
 def get_output(model, data, batch_size):
     model.set_batch_size(batch_size)
@@ -214,24 +236,24 @@ def get_output(model, data, batch_size):
 if __name__ == '__main__':
     
     # some settings
-    submission = False
-    structure = [1875, 2000, 2000]
-    batch_size = 50
+    submission = True
+    structure = [1875, 3000, 3000, 2000, 2000, 2000]
+    batch_size = 100
     
     unsup_data, sup_data = process_data()
     
-    stackedrbm = construct_stacked_rbm(structure)
-    #stackedrbm = serial.load(DATA_DIR+'gbrbm_pretrained.pkl')
+    stack = construct_ae(structure)
+    #stack = serial.load(DATA_DIR+'gbrbm_pretrained.pkl')
     
     # pre-train model
-    for ii, layer in enumerate(stackedrbm.layers()):
+    for ii, layer in enumerate(stack.layers()):
         utraindata = unsup_data if ii==0 else TransformerDataset(raw=unsup_data,
-                                                transformer=StackedBlocks(stackedrbm.layers()[:ii]))
-        trainer = get_pretrainer(layer, utraindata, batch_size)
+                                                transformer=StackedBlocks(stack.layers()[:ii]))
+        trainer = get_ae_pretrainer(layer, utraindata, batch_size)
         trainer.main_loop()
     
     # construct DBN
-    dbn = construct_dbn(stackedrbm)
+    dbn = construct_dbn_from_stack(stack)
     
     # train DBN
     if submission:
