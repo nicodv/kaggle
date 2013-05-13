@@ -196,18 +196,23 @@ def get_rbm_pretrainer(layer, data, batch_size):
     return Train(model=layer, algorithm=train_algo, dataset=data, \
             extensions=[sgd.MomentumAdjustor(final_momentum=0.9, start=0, saturate=5), ])
 
-def get_finetuner(model, trainset, validset=None, batch_size=100):
+def get_finetuner(model, trainset, validset=None, batch_size=100, dropout_strategy='default'):
+    if dropout_strategy == 'default':
+        cost = dropout.Dropout(input_include_probs={'h0': 0.8}, input_scales={'h0': 1./0.8})
+    elif dropout_strategy == 'funnel':
+        dropout.Dropout(input_include_probs={'h0': 0.8, 'h1': 0.2, 'h2': 0.4, 'h3': 0.6, 'h4': 0.8, 'h5': 0.8},
+            input_scales={'h0': 1./0.8, 'h1': 1./0.2, 'h2': 1./0.4, 'h3': 1./0.6, 'h4': 1./0.8, 'h5': 1./0.8})
+    elif dropout_strategy == 'fan':
+        dropout.Dropout(input_include_probs={'h0': 0.8, 'h1': 0.8, 'h2': 0.6, 'h3': 0.4, 'h4': 0.2, 'h5': 0.2},
+            input_scales={'h0': 1./0.8, 'h1': 1./0.8, 'h2': 1./0.6, 'h3': 1./0.4, 'h4': 1./0.2, 'h5': 1./0.2})
+    
     train_algo = sgd.SGD(
         batch_size = batch_size,
         init_momentum = 0.5,
         learning_rate = 0.5,
         monitoring_batches = 100/batch_size,
         monitoring_dataset = {'train': trainset, 'valid': validset},
-        cost = dropout.Dropout(input_include_probs={'h0': 0.8}, input_scales={'h0': 1./0.8}),
-        #cost = dropout.Dropout(input_include_probs={'h0': 0.8, 'h1': 0.2, 'h2': 0.4, 'h3': 0.6, 'h4': 0.8, 'h5': 0.8},
-        #                        input_scales={'h0': 1./0.8, 'h1': 1./0.2, 'h2': 1./0.4, 'h3': 1./0.6, 'h4': 1./0.8, 'h5': 1./0.8}),
-        #cost = dropout.Dropout(input_include_probs={'h0': 0.8, 'h1': 0.8, 'h2': 0.6, 'h3': 0.4, 'h4': 0.2, 'h5': 0.2},
-        #                        input_scales={'h0': 1./0.8, 'h1': 1./0.8, 'h2': 1./0.6, 'h3': 1./0.4, 'h4': 1./0.2, 'h5': 1./0.2}),
+        cost = cost,
         termination_criterion = EpochCounter(200),
         update_callbacks = sgd.ExponentialDecay(decay_factor=1.0001, min_lr=0.001)
     )
@@ -256,14 +261,16 @@ if __name__ == '__main__':
     unsup_data, sup_data = process_data()
     
     stack = construct_ae(structure)
-    #stack = serial.load(DATA_DIR+'gbrbm_pretrained.pkl')
+    #stack = serial.load(DATA_DIR+'ae_pretrained.pkl')
     
     # pre-train model
     for ii, layer in enumerate(stack.layers()):
         utraindata = unsup_data if ii==0 else TransformerDataset(raw=unsup_data,
                                                 transformer=StackedBlocks(stack.layers()[:ii]))
-        trainer = get_ae_pretrainer(layer, utraindata, batch_size)
-        trainer.main_loop()
+        pretrainer = get_ae_pretrainer(layer, utraindata, batch_size)
+        pretrainer.main_loop()
+    
+    #serial.save(DATA_DIR+'ae_pretrained.pkl', stack)
     
     # construct DBN
     dbn = construct_dbn_from_stack(stack)
@@ -276,7 +283,15 @@ if __name__ == '__main__':
         traindata = sup_data[0]
         validdata = sup_data[1]
     
-    finetuner = get_finetuner(dbn, traindata, validdata, batch_size)
+    # finetune layer-by-layer
+    for ii, layer in enumerate(dbn.layers()):
+        straindata = traindata if ii==0 else TransformerDataset(raw=traindata,
+                                                transformer=StackedBlocks(dbn.layers()[:ii]))
+        lfinetuner = get_finetuner(layer, straindata, batch_size, dropout_strategy='default')
+        lfinetuner.main_loop()
+    
+    # total finetuner
+    finetuner = get_finetuner(dbn, traindata, validdata, batch_size, dropout_strategy='default')
     finetuner.main_loop()
     
     if submission:
