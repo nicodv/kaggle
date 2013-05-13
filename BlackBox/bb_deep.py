@@ -32,12 +32,8 @@ from pylearn2.distributions.mnd import MND
 DATA_DIR = '/home/nico/datasets/Kaggle/BlackBox/'
 
 class CAE_cost(costs.cost.Cost):
-    def __call__(self, model, X, Y=None, ** kwargs):
-        return ((model.reconstruct(X) - X) ** 2).sum(axis=1).mean() + model.contraction_penalty(X)
-
-class HOCAE_cost(costs.cost.Cost):
-    def __call__(self, model, X, Y=None, ** kwargs):
-        return ((model.reconstruct(X) - X) ** 2).sum(axis=1).mean() + model.higher_order_penalty(X)
+    def __call__(self, model, X, Y=None, coef1=0.5, coef2=0.5, ** kwargs):
+        return ((model.reconstruct(X) - X) ** 2).sum(axis=1).mean() + coef1*model.contraction_penalty(X) + coef2*model.higher_order_penalty(X)
 
 def process_data():
     # pre-process unsupervised data
@@ -114,8 +110,12 @@ def construct_ae(structure):
     layers = []
     for vsize,hsize in zip(structure[:-1], structure[1:]):
         # DenoisingAutoencoder?, ContractiveAutoencoder?, HigherOrderContractiveAutoencoder?
-        layers.append(autoencoder.ContractiveAutoencoder(
+        layers.append(autoencoder.HigherOrderContractiveAutoencoder(
+            # DenoisingAutoencoder
             #corruptor=BinomialCorruptor(0.5),
+            # HigherOrderContractiveAutoencoder
+            corruptor=GaussianCorruptor(0.5),
+            num_corruptions=8,
             nvis=vsize,
             nhid=hsize,
             tied_weights=True,
@@ -131,7 +131,7 @@ def construct_dbn_from_stack(stack):
     
     layers = []
     for ii, layer in enumerate(stack.layers()):
-        lr_scale = 1. if ii==0 else 0.25
+        lr_scale = 0.64 if ii==0 else 0.25
         layers.append(mlp.Sigmoid(
             dim=layer.nhid,
             layer_name='h'+str(ii),
@@ -141,7 +141,6 @@ def construct_dbn_from_stack(stack):
         ))
     # softmax layer at then end for classification
     layers.append(mlp.Softmax(
-        #nvis=stackedrbm.layers()[-1].nhid,
         n_classes=9,
         layer_name='y',
         irange=irange,
@@ -284,11 +283,11 @@ if __name__ == '__main__':
         validdata = sup_data[1]
     
     # finetune layer-by-layer
-    for ii, layer in enumerate(dbn.layers()):
-        straindata = traindata if ii==0 else TransformerDataset(raw=traindata,
-                                                transformer=StackedBlocks(dbn.layers()[:ii]))
-        lfinetuner = get_finetuner(layer, straindata, batch_size, dropout_strategy='default')
-        lfinetuner.main_loop()
+#    for ii, layer in enumerate(dbn.layers()):
+#        straindata = traindata if ii==0 else TransformerDataset(raw=traindata,
+#                                                transformer=StackedBlocks(dbn.layers()[:ii]))
+#        lfinetuner = get_finetuner(layer, straindata, batch_size, dropout_strategy='default')
+#        lfinetuner.main_loop()
     
     # total finetuner
     finetuner = get_finetuner(dbn, traindata, validdata, batch_size, dropout_strategy='default')
