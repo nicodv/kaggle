@@ -31,6 +31,14 @@ from pylearn2.distributions.mnd import MND
 
 DATA_DIR = '/home/nico/datasets/Kaggle/BlackBox/'
 
+class CAE_cost(costs.cost.Cost):
+    def __call__(self, model, X, Y=None, ** kwargs):
+        return ((model.reconstruct(X) - X) ** 2).sum(axis=1).mean() + model.contraction_penalty(X)
+
+class HOCAE_cost(costs.cost.Cost):
+    def __call__(self, model, X, Y=None, ** kwargs):
+        return ((model.reconstruct(X) - X) ** 2).sum(axis=1).mean() + model.higher_order_penalty(X)
+
 def process_data():
     # pre-process unsupervised data
     if not os.path.exists(DATA_DIR+'preprocess.pkl') \
@@ -105,8 +113,9 @@ def construct_ae(structure):
     
     layers = []
     for vsize,hsize in zip(structure[:-1], structure[1:]):
-        layers.append(autoencoder.DenoisingAutoencoder(
-            corruptor=BinomialCorruptor(0.5),
+        # DenoisingAutoencoder?, ContractiveAutoencoder?, HigherOrderContractiveAutoencoder?
+        layers.append(autoencoder.ContractiveAutoencoder(
+            #corruptor=BinomialCorruptor(0.5),
             nvis=vsize,
             nhid=hsize,
             tied_weights=True,
@@ -158,7 +167,7 @@ def get_ae_pretrainer(layer, data, batch_size):
         init_momentum = 0.5,
         monitoring_batches = 100/batch_size,
         monitoring_dataset = {'train': data},
-        cost = MeanSquaredReconstructionError(),
+        cost = CAE_cost(),
         termination_criterion =  EpochCounter(20),
         update_callbacks = sgd.ExponentialDecay(decay_factor=dec_fac, min_lr=0.001)
         )
@@ -195,6 +204,10 @@ def get_finetuner(model, trainset, validset=None, batch_size=100):
         monitoring_batches = 100/batch_size,
         monitoring_dataset = {'train': trainset, 'valid': validset},
         cost = dropout.Dropout(input_include_probs={'h0': 0.8}, input_scales={'h0': 1./0.8}),
+        #cost = dropout.Dropout(input_include_probs={'h0': 0.8, 'h1': 0.2, 'h2': 0.4, 'h3': 0.6, 'h4': 0.8, 'h5': 0.8},
+        #                        input_scales={'h0': 1./0.8, 'h1': 1./0.2, 'h2': 1./0.4, 'h3': 1./0.6, 'h4': 1./0.8, 'h5': 1./0.8}),
+        #cost = dropout.Dropout(input_include_probs={'h0': 0.8, 'h1': 0.8, 'h2': 0.6, 'h3': 0.4, 'h4': 0.2, 'h5': 0.2},
+        #                        input_scales={'h0': 1./0.8, 'h1': 1./0.8, 'h2': 1./0.6, 'h3': 1./0.4, 'h4': 1./0.2, 'h5': 1./0.2}),
         termination_criterion = EpochCounter(200),
         update_callbacks = sgd.ExponentialDecay(decay_factor=1.0001, min_lr=0.001)
     )
