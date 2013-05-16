@@ -32,8 +32,19 @@ from pylearn2.distributions.mnd import MND
 DATA_DIR = '/home/nico/datasets/Kaggle/BlackBox/'
 
 class CAE_cost(costs.cost.Cost):
-    def __call__(self, model, X, Y=None, coef1=0.5, coef2=0.5, ** kwargs):
-        return ((model.reconstruct(X) - X) ** 2).sum(axis=1).mean() + coef1*model.contraction_penalty(X) + coef2*model.higher_order_penalty(X)
+    def __call__(self, model, X, Y=None, coef1=0.2, coef2=0, ** kwargs):
+        if coef1 and coef2:
+            cost = ((model.reconstruct(X) - X) ** 2).sum(axis=1).mean() + coef1*model.contraction_penalty(X) + coef2*model.higher_order_penalty(X)
+        elif coef1:
+            cost = ((model.reconstruct(X) - X) ** 2).sum(axis=1).mean() + coef1*model.contraction_penalty(X)
+        else:
+            cost = ((model.reconstruct(X) - X) ** 2).sum(axis=1).mean()
+        return cost
+
+class Rectify(object):
+    def __call__(self, X_before_activation):
+        # X_before_activation is linear inputs of hidden units, dense
+        return X_before_activation * (X_before_activation > 0)
 
 def process_data():
     # pre-process unsupervised data
@@ -110,17 +121,17 @@ def construct_ae(structure):
     layers = []
     for vsize,hsize in zip(structure[:-1], structure[1:]):
         # DenoisingAutoencoder?, ContractiveAutoencoder?, HigherOrderContractiveAutoencoder?
-        layers.append(autoencoder.HigherOrderContractiveAutoencoder(
+        layers.append(autoencoder.ContractiveAutoencoder(
             # DenoisingAutoencoder
             #corruptor=BinomialCorruptor(0.5),
             # HigherOrderContractiveAutoencoder
-            corruptor=GaussianCorruptor(0.5),
-            num_corruptions=8,
+            #corruptor=GaussianCorruptor(0.5),
+            #num_corruptions=8,
             nvis=vsize,
             nhid=hsize,
             tied_weights=True,
-            act_enc='sigmoid',
-            act_dec='sigmoid',
+            act_enc=Rectify(),
+            act_dec=Rectify(),
             irange=irange
         ))
     return StackedBlocks(layers)
@@ -157,7 +168,7 @@ def construct_dbn_from_stack(stack):
     return dbn
 
 def get_ae_pretrainer(layer, data, batch_size):
-    init_lr = 0.05
+    init_lr = 0.1
     dec_fac = 1.0001
     
     train_algo = sgd.SGD(
@@ -167,7 +178,7 @@ def get_ae_pretrainer(layer, data, batch_size):
         monitoring_batches = 100/batch_size,
         monitoring_dataset = {'train': data},
         cost = CAE_cost(),
-        termination_criterion =  EpochCounter(20),
+        termination_criterion =  EpochCounter(10),
         update_callbacks = sgd.ExponentialDecay(decay_factor=dec_fac, min_lr=0.001)
         )
     return Train(model=layer, algorithm=train_algo, dataset=data, \
@@ -197,26 +208,27 @@ def get_rbm_pretrainer(layer, data, batch_size):
 
 def get_finetuner(model, trainset, validset=None, batch_size=100, dropout_strategy='default'):
     if dropout_strategy == 'default':
-        cost = dropout.Dropout(input_include_probs={'h0': 0.8}, input_scales={'h0': 1./0.8})
+        cost = dropout.Dropout(input_include_probs={'h0': 0.5}, input_scales={'h0': 1./0.5}, 
+                               default_input_include_prob=.25, default_input_scale=4.)
     elif dropout_strategy == 'funnel':
-        dropout.Dropout(input_include_probs={'h0': 0.8, 'h1': 0.2, 'h2': 0.4, 'h3': 0.6, 'h4': 0.8, 'h5': 0.8},
-            input_scales={'h0': 1./0.8, 'h1': 1./0.2, 'h2': 1./0.4, 'h3': 1./0.6, 'h4': 1./0.8, 'h5': 1./0.8})
+        cost = dropout.Dropout(input_include_probs={'h0': 0.8, 'h1': 0.2, 'h2': 0.4, 'h3': 0.6, 'h4': 0.8},
+            input_scales={'h0': 1./0.8, 'h1': 1./0.2, 'h2': 1./0.4, 'h3': 1./0.6, 'h4': 1./0.8})
     elif dropout_strategy == 'fan':
-        dropout.Dropout(input_include_probs={'h0': 0.8, 'h1': 0.8, 'h2': 0.6, 'h3': 0.4, 'h4': 0.2, 'h5': 0.2},
-            input_scales={'h0': 1./0.8, 'h1': 1./0.8, 'h2': 1./0.6, 'h3': 1./0.4, 'h4': 1./0.2, 'h5': 1./0.2})
+        cost = dropout.Dropout(input_include_probs={'h0': 0.8, 'h1': 0.8, 'h2': 0.6, 'h3': 0.4, 'h4': 0.2},
+            input_scales={'h0': 1./0.8, 'h1': 1./0.8, 'h2': 1./0.6, 'h3': 1./0.4, 'h4': 1./0.2})
     
     train_algo = sgd.SGD(
         batch_size = batch_size,
         init_momentum = 0.5,
-        learning_rate = 0.5,
+        learning_rate = 1.,
         monitoring_batches = 100/batch_size,
         monitoring_dataset = {'train': trainset, 'valid': validset},
         cost = cost,
-        termination_criterion = EpochCounter(200),
-        update_callbacks = sgd.ExponentialDecay(decay_factor=1.0001, min_lr=0.001)
+        termination_criterion = EpochCounter(1000),
+        update_callbacks = sgd.ExponentialDecay(decay_factor=1.0005, min_lr=0.05)
     )
     return Train(model=model, algorithm=train_algo, dataset=trainset, save_freq=0, \
-            extensions=[sgd.MomentumAdjustor(final_momentum=0.9, start=0, saturate=150), ])
+            extensions=[sgd.MomentumAdjustor(final_momentum=0.9, start=0, saturate=800), ])
 
 def get_output(model, data, batch_size):
     model.set_batch_size(batch_size)
@@ -253,14 +265,15 @@ def get_output(model, data, batch_size):
 if __name__ == '__main__':
     
     # some settings
-    submission = True
-    structure = [1875, 3000, 3000, 2000, 2000, 2000]
+    submission = False
+    # note: MSE van CAE gaat omhoog bij 4e layer, maar bij 5e layer enorm omlaag (?)
+    structure = [1875, 3000, 3000, 3000, 2000, 2000]
     batch_size = 100
     
     unsup_data, sup_data = process_data()
     
     stack = construct_ae(structure)
-    #stack = serial.load(DATA_DIR+'ae_pretrained.pkl')
+    #stack = serial.load(DATA_DIR+'cae5_pretrained.pkl')
     
     # pre-train model
     for ii, layer in enumerate(stack.layers()):
@@ -269,7 +282,7 @@ if __name__ == '__main__':
         pretrainer = get_ae_pretrainer(layer, utraindata, batch_size)
         pretrainer.main_loop()
     
-    #serial.save(DATA_DIR+'ae_pretrained.pkl', stack)
+    #serial.save(DATA_DIR+'cae_pretrained.pkl', stack)
     
     # construct DBN
     dbn = construct_dbn_from_stack(stack)
@@ -281,13 +294,6 @@ if __name__ == '__main__':
     else:
         traindata = sup_data[0]
         validdata = sup_data[1]
-    
-    # finetune layer-by-layer
-#    for ii, layer in enumerate(dbn.layers()):
-#        straindata = traindata if ii==0 else TransformerDataset(raw=traindata,
-#                                                transformer=StackedBlocks(dbn.layers()[:ii]))
-#        lfinetuner = get_finetuner(layer, straindata, batch_size, dropout_strategy='default')
-#        lfinetuner.main_loop()
     
     # total finetuner
     finetuner = get_finetuner(dbn, traindata, validdata, batch_size, dropout_strategy='default')
