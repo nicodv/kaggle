@@ -89,9 +89,9 @@ def construct_ae(structure):
     layers = []
     for vsize,hsize in zip(structure[:-1], structure[1:]):
         # DenoisingAutoencoder?, ContractiveAutoencoder?, HigherOrderContractiveAutoencoder?
-        layers.append(autoencoder.ContractiveAutoencoder(
+        layers.append(autoencoder.DenoisingAutoencoder(
             # DenoisingAutoencoder
-            #corruptor=BinomialCorruptor(0.5),
+            corruptor=BinomialCorruptor(0.6),
             # HigherOrderContractiveAutoencoder
             #corruptor=GaussianCorruptor(0.5),
             #num_corruptions=8,
@@ -153,8 +153,8 @@ def get_ae_pretrainer(layer, data, batch_size):
         init_momentum = 0.5,
         monitoring_batches = 100/batch_size,
         monitoring_dataset = {'train': data},
-        #cost = MeanBinaryCrossEntropy(),
-        cost = CAE_cost(),
+        cost = MeanSquaredReconstructionError(),
+        #cost = CAE_cost(),
         termination_criterion =  EpochCounter(20),
         update_callbacks = sgd.ExponentialDecay(decay_factor=dec_fac, min_lr=0.02)
         )
@@ -234,7 +234,7 @@ if __name__ == '__main__':
         pretrainer = get_ae_pretrainer(layer, utraindata, batch_size)
         pretrainer.main_loop()
     
-    serial.save(DATA_DIR+'cae6_pretrained.pkl', stack)
+    serial.save(DATA_DIR+'dae6_pretrained.pkl', stack)
     
     # construct DBN
     dbn = construct_dbn_from_stack(stack)
