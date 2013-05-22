@@ -89,9 +89,9 @@ def construct_ae(structure):
     layers = []
     for vsize,hsize in zip(structure[:-1], structure[1:]):
         # DenoisingAutoencoder?, ContractiveAutoencoder?, HigherOrderContractiveAutoencoder?
-        layers.append(autoencoder.DenoisingAutoencoder(
+        layers.append(autoencoder.ContractiveAutoencoder(
             # DenoisingAutoencoder
-            corruptor=BinomialCorruptor(0.6),
+            #corruptor=BinomialCorruptor(0.6),
             # HigherOrderContractiveAutoencoder
             #corruptor=GaussianCorruptor(0.5),
             #num_corruptions=8,
@@ -113,14 +113,16 @@ def construct_dbn_from_stack(stack, dropout_strategy='default'):
     layers = []
     for ii, layer in enumerate(stack.layers()):
         if ii==0 or dropout_strategy=='default':
-            lr_scale = 0.25
+            lr_scale = 0.09
         elif ii==1:
-            lr_scale = 0.25
+            lr_scale = 0.16
         elif ii==2:
-            lr_scale = 0.36
+            lr_scale = 0.25
         elif ii==3:
-            lr_scale = 0.49
+            lr_scale = 0.
         elif ii==4:
+            lr_scale = 0.64
+        elif ii==5:
             lr_scale = 0.64
         layers.append(mlp.Sigmoid(
             dim=layer.nhid,
@@ -134,7 +136,7 @@ def construct_dbn_from_stack(stack, dropout_strategy='default'):
         n_classes=9,
         layer_name='y',
         irange=irange,
-        W_lr_scale=0.25
+        W_lr_scale=0.64
     ))
     dbn = mlp.MLP(layers=layers, nvis=stack.layers()[0].get_input_space().dim)
     # copy weigths to DBN
