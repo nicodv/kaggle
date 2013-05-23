@@ -113,7 +113,7 @@ def construct_dbn_from_stack(stack, dropout_strategy='default'):
     layers = []
     for ii, layer in enumerate(stack.layers()):
         if ii==0 or dropout_strategy=='default':
-            lr_scale = 0.09
+            lr_scale = 0.25
         elif ii==1:
             lr_scale = 0.16
         elif ii==2:
@@ -136,7 +136,7 @@ def construct_dbn_from_stack(stack, dropout_strategy='default'):
         n_classes=9,
         layer_name='y',
         irange=irange,
-        W_lr_scale=0.81
+        W_lr_scale=0.25
     ))
     dbn = mlp.MLP(layers=layers, nvis=stack.layers()[0].get_input_space().dim)
     # copy weigths to DBN
@@ -219,7 +219,7 @@ def get_output(model, data, batch_size):
 if __name__ == '__main__':
     
     # some settings
-    submission = True
+    submission = False
     # note: MSE van CAE gaat omhoog bij 4e layer, maar bij 5e layer enorm omlaag (?)
     structure = [1875, 2000, 2000, 2000, 2000, 2000, 2000]
     batch_size = 100
@@ -227,19 +227,19 @@ if __name__ == '__main__':
     unsup_data, sup_data = process_data()
     
     stack = construct_ae(structure)
-    #stack = serial.load(DATA_DIR+'cae6_005_pretrained.pkl')
+    stack = serial.load(DATA_DIR+'cae6_005_pretrained.pkl')
     
     # pre-train model
-    for ii, layer in enumerate(stack.layers()):
-        utraindata = unsup_data if ii==0 else TransformerDataset(raw=unsup_data,
-                                                transformer=StackedBlocks(stack.layers()[:ii]))
-        pretrainer = get_ae_pretrainer(layer, utraindata, batch_size)
-        pretrainer.main_loop()
+    #for ii, layer in enumerate(stack.layers()):
+        #utraindata = unsup_data if ii==0 else TransformerDataset(raw=unsup_data,
+        #                                        transformer=StackedBlocks(stack.layers()[:ii]))
+        #pretrainer = get_ae_pretrainer(layer, utraindata, batch_size)
+        #pretrainer.main_loop()
     
-    serial.save(DATA_DIR+'cae6_005_pretrained.pkl', stack)
+    #serial.save(DATA_DIR+'cae6_005_pretrained.pkl', stack)
     
     # construct DBN
-    dbn = construct_dbn_from_stack(stack, dropout_strategy='fan')
+    dbn = construct_dbn_from_stack(stack, dropout_strategy='default')
     
     # train DBN
     if submission:
