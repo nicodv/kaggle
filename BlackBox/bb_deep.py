@@ -26,7 +26,7 @@ from pylearn2.corruption import GaussianCorruptor, BinomialCorruptor
 DATA_DIR = '/home/nico/datasets/Kaggle/BlackBox/'
 
 class CAE_cost(costs.cost.Cost):
-    def __call__(self, model, X, Y=None, coef1=0.2, coef2=0, ** kwargs):
+    def __call__(self, model, X, Y=None, coef1=0.05, coef2=0, ** kwargs):
         if coef1 and coef2:
             cost = ((model.reconstruct(X) - X) ** 2).sum(axis=1).mean() + coef1*model.contraction_penalty(X) + coef2*model.higher_order_penalty(X)
         elif coef1:
@@ -119,9 +119,9 @@ def construct_dbn_from_stack(stack, dropout_strategy='default'):
         elif ii==2:
             lr_scale = 0.25
         elif ii==3:
-            lr_scale = 0.
+            lr_scale = 0.36
         elif ii==4:
-            lr_scale = 0.64
+            lr_scale = 0.49
         elif ii==5:
             lr_scale = 0.64
         layers.append(mlp.Sigmoid(
@@ -136,7 +136,7 @@ def construct_dbn_from_stack(stack, dropout_strategy='default'):
         n_classes=9,
         layer_name='y',
         irange=irange,
-        W_lr_scale=0.64
+        W_lr_scale=0.81
     ))
     dbn = mlp.MLP(layers=layers, nvis=stack.layers()[0].get_input_space().dim)
     # copy weigths to DBN
@@ -155,8 +155,8 @@ def get_ae_pretrainer(layer, data, batch_size):
         init_momentum = 0.5,
         monitoring_batches = 100/batch_size,
         monitoring_dataset = {'train': data},
-        cost = MeanSquaredReconstructionError(),
-        #cost = CAE_cost(),
+        #cost = MeanSquaredReconstructionError(),
+        cost = CAE_cost(),
         termination_criterion =  EpochCounter(20),
         update_callbacks = sgd.ExponentialDecay(decay_factor=dec_fac, min_lr=0.02)
         )
@@ -168,8 +168,8 @@ def get_finetuner(model, trainset, validset=None, batch_size=100, dropout_strate
         cost = dropout.Dropout(input_include_probs={'h0': 0.5}, input_scales={'h0': 1./0.5}, 
                                default_input_include_prob=0.5, default_input_scale=1./0.5)
     elif dropout_strategy == 'fan':
-        cost = dropout.Dropout(input_include_probs={'h0': 0.4, 'h1': 0.5, 'h2': 0.6, 'h3': 0.7, 'y': 0.8},
-            input_scales={'h0': 1./0.4, 'h1': 1./0.5, 'h2': 1./0.6, 'h3': 1./0.7, 'y': 1./0.8})
+        cost = dropout.Dropout(input_include_probs={'h0': 0.3, 'h1': 0.4, 'h2': 0.5, 'h3': 0.6, 'h4': 0.7, 'h5': 0.8, 'y': 0.9},
+            input_scales={'h0': 1./0.3, 'h1': 1./0.4, 'h2': 1./0.5, 'h3': 1./0.6, 'h4': 1./0.7, 'h5': 1./0.8, 'y': 1./0.9})
     
     train_algo = sgd.SGD(
         batch_size = batch_size,
@@ -178,11 +178,11 @@ def get_finetuner(model, trainset, validset=None, batch_size=100, dropout_strate
         monitoring_batches = 100/batch_size,
         monitoring_dataset = {'train': trainset, 'valid': validset},
         cost = cost,
-        termination_criterion = EpochCounter(400),
+        termination_criterion = EpochCounter(500),
         update_callbacks = sgd.ExponentialDecay(decay_factor=1.0005, min_lr=0.05)
     )
     return Train(model=model, algorithm=train_algo, dataset=trainset, save_freq=0, \
-            extensions=[sgd.MomentumAdjustor(final_momentum=0.9, start=0, saturate=360), ])
+            extensions=[sgd.MomentumAdjustor(final_momentum=0.9, start=0, saturate=400), ])
 
 def get_output(model, data, batch_size):
     model.set_batch_size(batch_size)
@@ -219,15 +219,15 @@ def get_output(model, data, batch_size):
 if __name__ == '__main__':
     
     # some settings
-    submission = False
+    submission = True
     # note: MSE van CAE gaat omhoog bij 4e layer, maar bij 5e layer enorm omlaag (?)
-    structure = [1875, 3000, 3000, 3000, 3000]
+    structure = [1875, 2000, 2000, 2000, 2000, 2000, 2000]
     batch_size = 100
     
     unsup_data, sup_data = process_data()
     
     stack = construct_ae(structure)
-    #stack = serial.load(DATA_DIR+'cae6_02_pretrained.pkl')
+    #stack = serial.load(DATA_DIR+'cae6_005_pretrained.pkl')
     
     # pre-train model
     for ii, layer in enumerate(stack.layers()):
@@ -236,7 +236,7 @@ if __name__ == '__main__':
         pretrainer = get_ae_pretrainer(layer, utraindata, batch_size)
         pretrainer.main_loop()
     
-    #serial.save(DATA_DIR+'cae6_02_pretrained.pkl', stack)
+    serial.save(DATA_DIR+'cae6_005_pretrained.pkl', stack)
     
     # construct DBN
     dbn = construct_dbn_from_stack(stack, dropout_strategy='fan')
