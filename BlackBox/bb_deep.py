@@ -113,7 +113,7 @@ def construct_dbn_from_stack(stack, dropout_strategy='default'):
     layers = []
     for ii, layer in enumerate(stack.layers()):
         if ii==0 or dropout_strategy=='default':
-            lr_scale = 0.25
+            lr_scale = 0.16
         elif ii==1:
             lr_scale = 0.16
         elif ii==2:
@@ -136,7 +136,7 @@ def construct_dbn_from_stack(stack, dropout_strategy='default'):
         n_classes=9,
         layer_name='y',
         irange=irange,
-        W_lr_scale=0.25
+        W_lr_scale=0.16
     ))
     dbn = mlp.MLP(layers=layers, nvis=stack.layers()[0].get_input_space().dim)
     # copy weigths to DBN
@@ -165,8 +165,8 @@ def get_ae_pretrainer(layer, data, batch_size):
 
 def get_finetuner(model, trainset, validset=None, batch_size=100, dropout_strategy='default'):
     if dropout_strategy == 'default':
-        cost = dropout.Dropout(input_include_probs={'h0': 0.5}, input_scales={'h0': 1./0.5}, 
-                               default_input_include_prob=0.5, default_input_scale=1./0.5)
+        cost = dropout.Dropout(input_include_probs={'h0': 0.4}, input_scales={'h0': 1./0.4}, 
+                               default_input_include_prob=0.4, default_input_scale=1./0.4)
     elif dropout_strategy == 'fan':
         cost = dropout.Dropout(input_include_probs={'h0': 0.3, 'h1': 0.4, 'h2': 0.5, 'h3': 0.6, 'h4': 0.7, 'h5': 0.8, 'y': 0.9},
             input_scales={'h0': 1./0.3, 'h1': 1./0.4, 'h2': 1./0.5, 'h3': 1./0.6, 'h4': 1./0.7, 'h5': 1./0.8, 'y': 1./0.9})
