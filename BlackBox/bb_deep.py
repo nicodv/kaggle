@@ -226,8 +226,8 @@ if __name__ == '__main__':
     
     unsup_data, sup_data = process_data()
     
-    stack = construct_ae(structure)
     stack = serial.load(DATA_DIR+'cae6_005_pretrained.pkl')
+    #stack = construct_ae(structure)
     
     # pre-train model
     #for ii, layer in enumerate(stack.layers()):
