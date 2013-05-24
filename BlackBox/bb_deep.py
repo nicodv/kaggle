@@ -40,21 +40,47 @@ class Rectify(object):
         # X_before_activation is linear inputs of hidden units, dense
         return X_before_activation * (X_before_activation > 0)
 
+class FrozenSigmoid(mlp.Sigmoid):
+    def __init__(self, freeze_params=True, **kwargs):
+        super(FrozenSigmoid, self).__init__(**kwargs)
+        self.freeze_params = freeze_params
+    
+    def get_params(self):
+        if self.freeze_params:
+            return []
+        return self.layer_content.get_params()
+    
+    def set_freeze(self, toggle):
+        self.freeze_params = toggle
+
+class FrozenSoftmax(mlp.Softmax):
+    def __init__(self, freeze_params=True, **kwargs):
+        super(FrozenSoftmax, self).__init__(**kwargs)
+        self.freeze_params = freeze_params
+    
+    def get_params(self):
+        if self.freeze_params:
+            return []
+        return self.layer_content.get_params()
+    
+    def set_freeze(self, toggle):
+        self.freeze_params = toggle
+
 def process_data():
     # pre-process unsupervised data
-    if not os.path.exists(DATA_DIR+'preprocess_zca.pkl') \
-    or not os.path.exists(DATA_DIR+'unsup_prep_data_zca.pkl') \
-    or not os.path.exists(DATA_DIR+'sup_prep_data_zca.pkl'):
+    if not os.path.exists(DATA_DIR+'preprocess.pkl') \
+    or not os.path.exists(DATA_DIR+'unsup_prep_data.pkl') \
+    or not os.path.exists(DATA_DIR+'sup_prep_data.pkl'):
         unsup_data = black_box_dataset.BlackBoxDataset('extra')
         pipeline = preprocessing.Pipeline()
         pipeline.items.append(preprocessing.Standardize(global_mean=False, global_std=False))
-        pipeline.items.append(preprocessing.ZCA(filter_bias=.1))
+        #pipeline.items.append(preprocessing.ZCA(filter_bias=.1))
         unsup_data.apply_preprocessor(preprocessor=pipeline, can_fit=True)
-        serial.save(DATA_DIR+'preprocess_zca.pkl', pipeline)
+        serial.save(DATA_DIR+'preprocess.pkl', pipeline)
         
         # why the hell do I get pickling errors if I use serial here? solve by pickling myself
         #serial.save(DATA_DIR+'unsup_prep_data.pkl', unsup_data)
-        out = open(DATA_DIR+'unsup_prep_data_zca.pkl', 'w')
+        out = open(DATA_DIR+'unsup_prep_data.pkl', 'w')
         pickle.dump(unsup_data, out)
         out.close()
         
@@ -72,13 +98,13 @@ def process_data():
             preprocessor=pipeline,
             fit_preprocessor=fit
             ))
-        serial.save(DATA_DIR+'sup_prep_data_zca.pkl', sup_data)
+        serial.save(DATA_DIR+'sup_prep_data.pkl', sup_data)
         
     else:
-        pipeline = serial.load(DATA_DIR+'preprocess_zca.pkl')
+        pipeline = serial.load(DATA_DIR+'preprocess.pkl')
         #unsup_data = serial.load(DATA_DIR+'unsup_prep_data.pkl')
-        unsup_data = pickle.load(open(DATA_DIR+'unsup_prep_data_zca.pkl', 'r'))
-        sup_data = serial.load(DATA_DIR+'sup_prep_data_zca.pkl')
+        unsup_data = pickle.load(open(DATA_DIR+'unsup_prep_data.pkl', 'r'))
+        sup_data = serial.load(DATA_DIR+'sup_prep_data.pkl')
     
     return unsup_data, sup_data
 
@@ -91,7 +117,7 @@ def construct_ae(structure):
         # DenoisingAutoencoder?, ContractiveAutoencoder?, HigherOrderContractiveAutoencoder?
         layers.append(autoencoder.ContractiveAutoencoder(
             # DenoisingAutoencoder
-            #corruptor=BinomialCorruptor(0.6),
+            #corruptor=BinomialCorruptor(0.5),
             # HigherOrderContractiveAutoencoder
             #corruptor=GaussianCorruptor(0.5),
             #num_corruptions=8,
@@ -106,45 +132,6 @@ def construct_ae(structure):
         ))
     return StackedBlocks(layers)
 
-def construct_dbn_from_stack(stack, dropout_strategy='default'):
-    # some settings
-    irange = 0.05
-    
-    layers = []
-    for ii, layer in enumerate(stack.layers()):
-        if ii==0 or dropout_strategy=='default':
-            lr_scale = 0.64
-        elif ii==1:
-            lr_scale = 0.16
-        elif ii==2:
-            lr_scale = 0.25
-        elif ii==3:
-            lr_scale = 0.36
-        elif ii==4:
-            lr_scale = 0.49
-        elif ii==5:
-            lr_scale = 0.64
-        layers.append(mlp.Sigmoid(
-            dim=layer.nhid,
-            layer_name='h'+str(ii),
-            irange=irange,
-            W_lr_scale=lr_scale,
-            max_col_norm=2.
-        ))
-    # softmax layer at then end for classification
-    layers.append(mlp.Softmax(
-        n_classes=9,
-        layer_name='y',
-        irange=irange,
-        W_lr_scale=0.25
-    ))
-    dbn = mlp.MLP(layers=layers, nvis=stack.layers()[0].get_input_space().dim)
-    # copy weigths to DBN
-    for ii, layer in enumerate(stack.layers()):
-        dbn.layers[ii].set_weights(layer.get_weights())
-        dbn.layers[ii].set_biases(layer.hidbias.get_value(borrow=False))
-    return dbn
-
 def get_ae_pretrainer(layer, data, batch_size):
     init_lr = 0.1
     dec_fac = 1.0001
@@ -157,20 +144,43 @@ def get_ae_pretrainer(layer, data, batch_size):
         monitoring_dataset = {'train': data},
         #cost = MeanSquaredReconstructionError(),
         cost = CAE_cost(),
-        termination_criterion =  EpochCounter(20),
+        termination_criterion = EpochCounter(20),
         update_callbacks = sgd.ExponentialDecay(decay_factor=dec_fac, min_lr=0.02)
         )
     return Train(model=layer, algorithm=train_algo, dataset=data, \
-            extensions=[sgd.MomentumAdjustor(final_momentum=0.9, start=0, saturate=5), ])
+            extensions=[sgd.MomentumAdjustor(final_momentum=0.9, start=0, saturate=15), ])
 
-def get_finetuner(model, trainset, validset=None, batch_size=100, dropout_strategy='default'):
-    if dropout_strategy == 'default':
-        cost = dropout.Dropout(input_include_probs={'h0': 0.8}, input_scales={'h0': 1./0.8}, 
-                               default_input_include_prob=0.5, default_input_scale=1./0.5)
-    elif dropout_strategy == 'fan':
-        cost = dropout.Dropout(input_include_probs={'h0': 0.3, 'h1': 0.4, 'h2': 0.5, 'h3': 0.6, 'h4': 0.7, 'h5': 0.8, 'y': 0.9},
-            input_scales={'h0': 1./0.3, 'h1': 1./0.4, 'h2': 1./0.5, 'h3': 1./0.6, 'h4': 1./0.7, 'h5': 1./0.8, 'y': 1./0.9})
+def construct_dbn_from_stack(stack):
+    # some settings
+    irange = 0.05
     
+    layers = []
+    for ii, layer in enumerate(stack.layers()):
+        lr_scale = 0.64 if ii==0 else 0.25
+        layers.append(FrozenSigmoid(
+            freeze_params=True,
+            dim=layer.nhid,
+            layer_name='h'+str(ii),
+            irange=irange,
+            W_lr_scale=lr_scale,
+            max_col_norm=2.
+        ))
+    # softmax layer at then end for classification
+    layers.append(FrozenSoftmax(
+        freeze_params=True,
+        n_classes=9,
+        layer_name='y',
+        irange=irange,
+        W_lr_scale=0.25
+    ))
+    dbn = mlp.MLP(layers=layers, nvis=stack.layers()[0].get_input_space().dim)
+    # copy weigths to DBN
+    for ii, layer in enumerate(stack.layers()):
+        dbn.layers[ii].set_weights(layer.get_weights())
+        dbn.layers[ii].set_biases(layer.hidbias.get_value(borrow=False))
+    return dbn
+
+def get_finetuner(model, cost, trainset, validset=None, batch_size=100, iters=100):
     train_algo = sgd.SGD(
         batch_size = batch_size,
         init_momentum = 0.5,
@@ -178,11 +188,11 @@ def get_finetuner(model, trainset, validset=None, batch_size=100, dropout_strate
         monitoring_batches = 100/batch_size,
         monitoring_dataset = {'train': trainset, 'valid': validset},
         cost = cost,
-        termination_criterion = EpochCounter(500),
+        termination_criterion = EpochCounter(iters),
         update_callbacks = sgd.ExponentialDecay(decay_factor=1.0005, min_lr=0.05)
     )
     return Train(model=model, algorithm=train_algo, dataset=trainset, save_freq=0, \
-            extensions=[sgd.MomentumAdjustor(final_momentum=0.9, start=0, saturate=400), ])
+            extensions=[sgd.MomentumAdjustor(final_momentum=0.9, start=0, saturate=int(0.8*iters)), ])
 
 def get_output(model, data, batch_size):
     model.set_batch_size(batch_size)
@@ -219,15 +229,15 @@ def get_output(model, data, batch_size):
 if __name__ == '__main__':
     
     # some settings
-    submission = False
+    submission = True
     # note: MSE van CAE gaat omhoog bij 4e layer, maar bij 5e layer enorm omlaag (?)
     structure = [1875, 2000, 2000, 2000, 2000, 2000, 2000]
     batch_size = 100
     
     unsup_data, sup_data = process_data()
     
-    #stack = serial.load(DATA_DIR+'cae6_005_pretrained.pkl')
     stack = construct_ae(structure)
+    #stack = serial.load(DATA_DIR+'cae6_005_pretrained.pkl')
     
     # pre-train model
     for ii, layer in enumerate(stack.layers()):
@@ -236,10 +246,10 @@ if __name__ == '__main__':
         pretrainer = get_ae_pretrainer(layer, utraindata, batch_size)
         pretrainer.main_loop()
     
-    serial.save(DATA_DIR+'cae6_005_pretrained_zca.pkl', stack)
+    serial.save(DATA_DIR+'cae6_005_pretrained.pkl', stack)
     
     # construct DBN
-    dbn = construct_dbn_from_stack(stack, dropout_strategy='default')
+    dbn = construct_dbn_from_stack(stack)
     
     # train DBN
     if submission:
@@ -249,8 +259,26 @@ if __name__ == '__main__':
         traindata = sup_data[0]
         validdata = sup_data[1]
     
+    cost = dropout.Dropout(input_include_probs={'h0': 0.8}, input_scales={'h0': 1./0.8},
+                           default_input_include_prob=0.5, default_input_scale=1./0.5)
+    
+    # finetune softmax layer a bit
+    finetuner = get_finetuner(dbn, cost, traindata, validdata, batch_size, 20)
+    finetuner.main_loop()
+    dbn.layers[-1].set_freeze(True)
+    
+    # now finetune layer-by-layer
+    for ii in range(len(structure)-1):
+        dbn.layers[ii].set_freeze(False)
+        finetuner = get_finetuner(dbn, cost, traindata, validdata, batch_size, 50)
+        finetuner.main_loop()
+        dbn.layers[ii].set_freeze(True)
+    
     # total finetuner
-    finetuner = get_finetuner(dbn, traindata, validdata, batch_size, dropout_strategy='default')
+    for ii in range(len(dbn.layers)):
+        dbn.layers[ii].set_freeze(False)
+    
+    finetuner = get_finetuner(dbn, cost, traindata, validdata, batch_size, 200)
     finetuner.main_loop()
     
     if submission:
