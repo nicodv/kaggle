@@ -40,32 +40,6 @@ class Rectify(object):
         # X_before_activation is linear inputs of hidden units, dense
         return X_before_activation * (X_before_activation > 0)
 
-class FrozenSigmoid(mlp.Sigmoid):
-    def __init__(self, freeze_params=True, **kwargs):
-        super(FrozenSigmoid, self).__init__(**kwargs)
-        self.freeze_params = freeze_params
-    
-    def get_params(self):
-        if self.freeze_params:
-            return []
-        return self.get_params()
-    
-    def set_freeze(self, toggle):
-        self.freeze_params = toggle
-
-class FrozenSoftmax(mlp.Softmax):
-    def __init__(self, freeze_params=True, **kwargs):
-        super(FrozenSoftmax, self).__init__(**kwargs)
-        self.freeze_params = freeze_params
-    
-    def get_params(self):
-        if self.freeze_params:
-            return []
-        return self.get_params()
-    
-    def set_freeze(self, toggle):
-        self.freeze_params = toggle
-
 def process_data():
     # pre-process unsupervised data
     if not os.path.exists(DATA_DIR+'preprocess.pkl') \
@@ -156,9 +130,8 @@ def construct_dbn_from_stack(stack):
     
     layers = []
     for ii, layer in enumerate(stack.layers()):
-        lr_scale = 0.64 if ii==0 else 0.25
-        layers.append(FrozenSigmoid(
-            freeze_params=True,
+        lr_scale = 0.25 if ii==0 else 0.25
+        layers.append(mlp.Sigmoid(
             dim=layer.nhid,
             layer_name='h'+str(ii),
             irange=irange,
@@ -166,8 +139,7 @@ def construct_dbn_from_stack(stack):
             max_col_norm=2.
         ))
     # softmax layer at then end for classification
-    layers.append(FrozenSoftmax(
-        freeze_params=False,
+    layers.append(mlp.Softmax(
         n_classes=9,
         layer_name='y',
         irange=irange,
@@ -185,11 +157,11 @@ def get_finetuner(model, cost, trainset, validset=None, batch_size=100, iters=10
         batch_size = batch_size,
         init_momentum = 0.5,
         learning_rate = 0.5,
-        monitoring_batches = 100/batch_size,
-        monitoring_dataset = {'train': trainset, 'valid': validset},
+        #monitoring_batches = 100/batch_size,
+        #monitoring_dataset = {'train': trainset, 'valid': validset},
         cost = cost,
         termination_criterion = EpochCounter(iters),
-        update_callbacks = sgd.ExponentialDecay(decay_factor=1.0005, min_lr=0.05)
+        update_callbacks = sgd.ExponentialDecay(decay_factor=1.005, min_lr=0.05)
     )
     return Train(model=model, algorithm=train_algo, dataset=trainset, save_freq=0, \
             extensions=[sgd.MomentumAdjustor(final_momentum=0.9, start=0, saturate=int(0.8*iters)), ])
@@ -232,7 +204,7 @@ if __name__ == '__main__':
     submission = True
     # note: MSE van CAE gaat omhoog bij 4e layer, maar bij 5e layer enorm omlaag (?)
     structure = [1875, 2000, 2000, 2000, 2000, 2000, 2000]
-    batch_size = 100
+    batch_size = 50
     
     unsup_data, sup_data = process_data()
     
@@ -259,27 +231,27 @@ if __name__ == '__main__':
         traindata = sup_data[0]
         validdata = sup_data[1]
     
-    cost = dropout.Dropout(input_include_probs={'h0': 0.5}, input_scales={'h0': 1./0.5},
+    cost = dropout.Dropout(input_include_probs={'h0': 0.8}, input_scales={'h0': 1./0.8},
                            default_input_include_prob=0.5, default_input_scale=1./0.5)
     
     # finetune softmax layer a bit
-    finetuner = get_finetuner(dbn, cost, traindata, validdata, batch_size, 50)
+    finetuner = get_finetuner(dbn, cost, traindata, validdata, batch_size, iters=100)
     finetuner.main_loop()
     
     # now finetune layer-by-layer
-    lrs = [0.01, 0.04, 0.1, 0.2, 0.25]
+    lrs = [10., 5., 2., 1., 0.25]
     for ii, lr in zip(range(len(structure)-1), lrs):
         # set lr to boosted value for current layer
         dbn.layers[ii].W_lr_scale = lr
         
-        finetuner = get_finetuner(dbn, cost, traindata, validdata, batch_size, 50)
+        finetuner = get_finetuner(dbn, cost, traindata, validdata, batch_size, iters=50)
         finetuner.main_loop()
         
         # return to original lr
         dbn.layers[ii].W_lr_scale = 0.25
     
     # total finetuner
-    finetuner = get_finetuner(dbn, cost, traindata, validdata, batch_size, 200)
+    finetuner = get_finetuner(dbn, cost, traindata, validdata, batch_size, iters=200)
     finetuner.main_loop()
     
     if submission:
