@@ -42,19 +42,19 @@ class Rectify(object):
 
 def process_data():
     # pre-process unsupervised data
-    if not os.path.exists(DATA_DIR+'preprocess.pkl') \
-    or not os.path.exists(DATA_DIR+'unsup_prep_data.pkl') \
-    or not os.path.exists(DATA_DIR+'sup_prep_data.pkl'):
+    if not os.path.exists(DATA_DIR+'preprocess_zca.pkl') \
+    or not os.path.exists(DATA_DIR+'unsup_prep_data_zca.pkl') \
+    or not os.path.exists(DATA_DIR+'sup_prep_data_zca.pkl'):
         unsup_data = black_box_dataset.BlackBoxDataset('extra')
         pipeline = preprocessing.Pipeline()
         pipeline.items.append(preprocessing.Standardize(global_mean=False, global_std=False))
-        #pipeline.items.append(preprocessing.ZCA(filter_bias=.1))
+        pipeline.items.append(preprocessing.ZCA(filter_bias=.1))
         unsup_data.apply_preprocessor(preprocessor=pipeline, can_fit=True)
-        serial.save(DATA_DIR+'preprocess.pkl', pipeline)
+        serial.save(DATA_DIR+'preprocess_zca.pkl', pipeline)
         
         # why the hell do I get pickling errors if I use serial here? solve by pickling myself
         #serial.save(DATA_DIR+'unsup_prep_data.pkl', unsup_data)
-        out = open(DATA_DIR+'unsup_prep_data.pkl', 'w')
+        out = open(DATA_DIR+'unsup_prep_data_zca.pkl', 'w')
         pickle.dump(unsup_data, out)
         out.close()
         
@@ -72,13 +72,13 @@ def process_data():
             preprocessor=pipeline,
             fit_preprocessor=fit
             ))
-        serial.save(DATA_DIR+'sup_prep_data.pkl', sup_data)
+        serial.save(DATA_DIR+'sup_prep_data_zca.pkl', sup_data)
         
     else:
-        pipeline = serial.load(DATA_DIR+'preprocess.pkl')
+        pipeline = serial.load(DATA_DIR+'preprocess_zca.pkl')
         #unsup_data = serial.load(DATA_DIR+'unsup_prep_data.pkl')
-        unsup_data = pickle.load(open(DATA_DIR+'unsup_prep_data.pkl', 'r'))
-        sup_data = serial.load(DATA_DIR+'sup_prep_data.pkl')
+        unsup_data = pickle.load(open(DATA_DIR+'unsup_prep_data_zca.pkl', 'r'))
+        sup_data = serial.load(DATA_DIR+'sup_prep_data_zca.pkl')
     
     return unsup_data, sup_data
 
@@ -113,7 +113,7 @@ def construct_dbn_from_stack(stack, dropout_strategy='default'):
     layers = []
     for ii, layer in enumerate(stack.layers()):
         if ii==0 or dropout_strategy=='default':
-            lr_scale = 0.16
+            lr_scale = 0.64
         elif ii==1:
             lr_scale = 0.16
         elif ii==2:
@@ -136,7 +136,7 @@ def construct_dbn_from_stack(stack, dropout_strategy='default'):
         n_classes=9,
         layer_name='y',
         irange=irange,
-        W_lr_scale=0.16
+        W_lr_scale=0.25
     ))
     dbn = mlp.MLP(layers=layers, nvis=stack.layers()[0].get_input_space().dim)
     # copy weigths to DBN
@@ -165,8 +165,8 @@ def get_ae_pretrainer(layer, data, batch_size):
 
 def get_finetuner(model, trainset, validset=None, batch_size=100, dropout_strategy='default'):
     if dropout_strategy == 'default':
-        cost = dropout.Dropout(input_include_probs={'h0': 0.4}, input_scales={'h0': 1./0.4}, 
-                               default_input_include_prob=0.4, default_input_scale=1./0.4)
+        cost = dropout.Dropout(input_include_probs={'h0': 0.8}, input_scales={'h0': 1./0.8}, 
+                               default_input_include_prob=0.5, default_input_scale=1./0.5)
     elif dropout_strategy == 'fan':
         cost = dropout.Dropout(input_include_probs={'h0': 0.3, 'h1': 0.4, 'h2': 0.5, 'h3': 0.6, 'h4': 0.7, 'h5': 0.8, 'y': 0.9},
             input_scales={'h0': 1./0.3, 'h1': 1./0.4, 'h2': 1./0.5, 'h3': 1./0.6, 'h4': 1./0.7, 'h5': 1./0.8, 'y': 1./0.9})
@@ -226,17 +226,17 @@ if __name__ == '__main__':
     
     unsup_data, sup_data = process_data()
     
-    stack = serial.load(DATA_DIR+'cae6_005_pretrained.pkl')
-    #stack = construct_ae(structure)
+    #stack = serial.load(DATA_DIR+'cae6_005_pretrained.pkl')
+    stack = construct_ae(structure)
     
     # pre-train model
-    #for ii, layer in enumerate(stack.layers()):
-        #utraindata = unsup_data if ii==0 else TransformerDataset(raw=unsup_data,
-        #                                        transformer=StackedBlocks(stack.layers()[:ii]))
-        #pretrainer = get_ae_pretrainer(layer, utraindata, batch_size)
-        #pretrainer.main_loop()
+    for ii, layer in enumerate(stack.layers()):
+        utraindata = unsup_data if ii==0 else TransformerDataset(raw=unsup_data,
+                                                transformer=StackedBlocks(stack.layers()[:ii]))
+        pretrainer = get_ae_pretrainer(layer, utraindata, batch_size)
+        pretrainer.main_loop()
     
-    #serial.save(DATA_DIR+'cae6_005_pretrained.pkl', stack)
+    serial.save(DATA_DIR+'cae6_005_pretrained_zca.pkl', stack)
     
     # construct DBN
     dbn = construct_dbn_from_stack(stack, dropout_strategy='default')
