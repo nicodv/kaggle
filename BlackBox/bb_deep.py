@@ -167,7 +167,7 @@ def construct_dbn_from_stack(stack):
         ))
     # softmax layer at then end for classification
     layers.append(FrozenSoftmax(
-        freeze_params=True,
+        freeze_params=False,
         n_classes=9,
         layer_name='y',
         irange=irange,
@@ -236,17 +236,17 @@ if __name__ == '__main__':
     
     unsup_data, sup_data = process_data()
     
-    stack = construct_ae(structure)
-    #stack = serial.load(DATA_DIR+'cae6_005_pretrained.pkl')
+    stack = serial.load(DATA_DIR+'cae6_005_pretrained.pkl')
+    #stack = construct_ae(structure)
     
     # pre-train model
-    for ii, layer in enumerate(stack.layers()):
-        utraindata = unsup_data if ii==0 else TransformerDataset(raw=unsup_data,
-                                                transformer=StackedBlocks(stack.layers()[:ii]))
-        pretrainer = get_ae_pretrainer(layer, utraindata, batch_size)
-        pretrainer.main_loop()
+    #for ii, layer in enumerate(stack.layers()):
+        #utraindata = unsup_data if ii==0 else TransformerDataset(raw=unsup_data,
+        #                                        transformer=StackedBlocks(stack.layers()[:ii]))
+        #pretrainer = get_ae_pretrainer(layer, utraindata, batch_size)
+        #pretrainer.main_loop()
     
-    serial.save(DATA_DIR+'cae6_005_pretrained.pkl', stack)
+    #serial.save(DATA_DIR+'cae6_005_pretrained.pkl', stack)
     
     # construct DBN
     dbn = construct_dbn_from_stack(stack)
