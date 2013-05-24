@@ -48,7 +48,7 @@ class FrozenSigmoid(mlp.Sigmoid):
     def get_params(self):
         if self.freeze_params:
             return []
-        return self.layer_content.get_params()
+        return self.get_params()
     
     def set_freeze(self, toggle):
         self.freeze_params = toggle
@@ -61,7 +61,7 @@ class FrozenSoftmax(mlp.Softmax):
     def get_params(self):
         if self.freeze_params:
             return []
-        return self.layer_content.get_params()
+        return self.get_params()
     
     def set_freeze(self, toggle):
         self.freeze_params = toggle
