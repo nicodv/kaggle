@@ -259,25 +259,26 @@ if __name__ == '__main__':
         traindata = sup_data[0]
         validdata = sup_data[1]
     
-    cost = dropout.Dropout(input_include_probs={'h0': 0.8}, input_scales={'h0': 1./0.8},
+    cost = dropout.Dropout(input_include_probs={'h0': 0.5}, input_scales={'h0': 1./0.5},
                            default_input_include_prob=0.5, default_input_scale=1./0.5)
     
     # finetune softmax layer a bit
-    finetuner = get_finetuner(dbn, cost, traindata, validdata, batch_size, 20)
+    finetuner = get_finetuner(dbn, cost, traindata, validdata, batch_size, 50)
     finetuner.main_loop()
-    dbn.layers[-1].set_freeze(True)
     
     # now finetune layer-by-layer
-    for ii in range(len(structure)-1):
-        dbn.layers[ii].set_freeze(False)
+    lrs = [0.01, 0.04, 0.1, 0.2, 0.25]
+    for ii, lr in zip(range(len(structure)-1), lrs):
+        # set lr to boosted value for current layer
+        dbn.layers[ii].W_lr_scale = lr
+        
         finetuner = get_finetuner(dbn, cost, traindata, validdata, batch_size, 50)
         finetuner.main_loop()
-        dbn.layers[ii].set_freeze(True)
+        
+        # return to original lr
+        dbn.layers[ii].W_lr_scale = 0.25
     
     # total finetuner
-    for ii in range(len(dbn.layers)):
-        dbn.layers[ii].set_freeze(False)
-    
     finetuner = get_finetuner(dbn, cost, traindata, validdata, batch_size, 200)
     finetuner.main_loop()
     
