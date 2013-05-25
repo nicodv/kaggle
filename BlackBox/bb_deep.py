@@ -231,7 +231,7 @@ if __name__ == '__main__':
         traindata = sup_data[0]
         validdata = sup_data[1]
     
-    cost = dropout.Dropout(input_include_probs={'h0': 0.8}, input_scales={'h0': 1./0.8},
+    cost = dropout.Dropout(input_include_probs={'h0': 0.5}, input_scales={'h0': 1./0.5},
                            default_input_include_prob=0.5, default_input_scale=1./0.5)
     
     # finetune softmax layer a bit
@@ -239,7 +239,7 @@ if __name__ == '__main__':
     finetuner.main_loop()
     
     # now finetune layer-by-layer
-    lrs = [10., 5., 2., 1., 0.25]
+    lrs = [5., 2., 1., 0.5, 0.25]
     for ii, lr in zip(range(len(structure)-1), lrs):
         # set lr to boosted value for current layer
         dbn.layers[ii].W_lr_scale = lr
