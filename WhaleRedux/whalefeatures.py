@@ -7,37 +7,32 @@ import yaafelib as yl
 import re
 import pandas as pd
 
-traindir ='/home/nico/datasets/Kaggle/Whales/train'
-testdir  ='/home/nico/datasets/Kaggle/Whales/test'
-datdir   ='/home/nico/datasets/Kaggle/Whales'
+traindir ='/home/nico/datasets/Kaggle/WhaleRedux/train2'
+testdir  ='/home/nico/datasets/Kaggle/WhaleRedux/test2'
+datdir   ='/home/nico/datasets/Kaggle/WhaleRedux'
 
 SAMPLE_RATE = 2000
 SAMPLE_LENGTH = 2
 
-# add training examples from DCLDE 2013 Workshop Dataset?
-DCLDE_DATA = True
-
 def read_samples(dir):
     allSigs = np.zeros( (len(os.listdir(dir)),SAMPLE_LENGTH*SAMPLE_RATE) )
-    filenumbers = []
+    filenames = []
     for cnt, filename in enumerate(os.listdir(dir)):
         if os.path.isfile(os.path.join(dir, filename)):
-            filenumbers.append(int(re.findall('[0-9]+',filename)[0]))
+            filenames.append(filename)
             sample = aifc.open(os.path.join(dir, filename), 'r')
             nframes = sample.getnframes()
             strSig = sample.readframes(nframes)
             allSigs[cnt,:] = np.fromstring(strSig, np.short).byteswap()
             sample.close()
-    return filenumbers, allSigs
+    return filenames, allSigs
 
 def read_targets():
-    targets = pd.read_csv(os.path.join(datdir,'train.csv'))
-    targets.clip_name = targets.clip_name.map(lambda x: x.replace('.aiff',''))
-    targets.clip_name = targets.clip_name.map(lambda x: int(x.replace('train','')))
-    targets = targets.set_index('clip_name')
-    targets = targets.sort()
-    
-    return targets.label
+    targets = []
+    for cnt, filename in enumerate(os.listdir(traindir)):
+        if os.path.isfile(os.path.join(traindir, filename)):
+            targets.append(re.search('(ms_TRAIN([0-9]*))',filename).group(1))
+    return targets
 
 def extract_audio_features(sigdata):
     '''Extracts a bunch of audio features using YAAFE
@@ -49,7 +44,6 @@ def extract_audio_features(sigdata):
     fp = yl.FeaturePlan(sample_rate=SAMPLE_RATE)
     fp.addFeature('CDOD: ComplexDomainOnsetDetection FFTWindow=%s blockSize=%d stepSize=%d' % (window, block, step))
     fp.addFeature('LPC: LPC LPCNbCoeffs=4 blockSize=%d stepSize=%d' % (block, step))
-    #fp.addFeature('MagnSpec: MagnitudeSpectrum FFTWindow=%s blockSize=%d stepSize=%d' % (window, block, step))
     fp.addFeature('MelSpec: MelSpectrum FFTWindow=%s MelMaxFreq=600 MelMinFreq=30 MelNbFilters=40 blockSize=%d stepSize=%d' % (window, block, step))
     fp.addFeature('MFCC: MFCC CepsIgnoreFirstCoeff=1 CepsNbCoeffs=12 FFTWindow=%s MelMaxFreq=600 MelMinFreq=30 MelNbFilters=40 blockSize=%d stepSize=%d' % (window, block, step))
     fp.addFeature('SF: SpectralFlux FFTWindow=%s FluxSupport=Increase blockSize=%d stepSize=%d' % (window, block, step))
@@ -82,29 +76,15 @@ if __name__ == '__main__':
     
     for curstr in ('train','test'):
         # read samples and store file numbers
-        numbers, sigs = read_samples(eval(curstr+'dir'))
+        names, sigs = read_samples(eval(curstr+'dir'))
         
         # original data is pretty clean, but still remove mean
         sigs = sigs - np.mean(sigs, axis=1, keepdims=True)
         
-        if DCLDE_DATA and curstr == 'train':
-            # add DCLDE 2013 Workshop Dataset data
-            numbers = [x+36671 for x in numbers]
-            extnumbers = range(1,36672)
-            numbers.extend(extnumbers)
-            whales = np.genfromtxt(datdir+'/extra/signals.csv', delimiter=',')
-            nowhales = np.genfromtxt(datdir+'/extra/nosignals.csv', delimiter=',')
-            # DCLDE data has low-frequency signals in the data,
-            # remove by subtracting simple moving average
-            whales = _remove_bias(whales, window=50)
-            nowhales = _remove_bias(nowhales, window=50)
-            sigs = np.concatenate((sigs,whales,nowhales))
-            assert len(numbers)==len(sigs)
-        
         # make sure the data is sorted according to file number
         # (necessary, since sorting is alphanumeric: 1, 10, 100, 2, etc.)
-        numbers = np.array(numbers)
-        sigs = sigs[numbers.argsort()]
+        #names = np.array(names)
+        #sigs = sigs[names.argsort()]
         
         # standardize all signals
         sigs = sigs / np.std(sigs, axis=1, keepdims=True)
@@ -121,12 +101,6 @@ if __name__ == '__main__':
         np.save(os.path.join(datdir,curstr+'specfeat'), specfeat)
     
     targets = read_targets()
-    
-    if DCLDE_DATA:
-        # add DCLDE 2013 Workshop Dataset labels
-        whalelabels = pd.Series(np.ones(6671))
-        nowhalelabels = pd.Series(np.zeros(30000))
-        targets = pd.concat([whalelabels,nowhalelabels,targets])
     
     # convert to one-hot numpy array
     targets = np.array((targets,-targets+1)).T
