@@ -11,7 +11,7 @@ from pylearn2.datasets.dense_design_matrix import DenseDesignMatrix, DefaultView
 from pylearn2.datasets import preprocessing
 import pylearn2.utils.serial as serial
 
-DATA_DIR = '/home/nico/datasets/Kaggle/Whales/'
+DATA_DIR = '/home/nico/datasets/Kaggle/WhaleRedux/'
 
 
 class Whales(DenseDesignMatrix):
@@ -71,8 +71,8 @@ def get_dataset(which_data, tot=False):
     else:
         
         print 'loading raw data...'
-        trainset = Whales(which_set="train", which_data=which_data, start=0, stop=56671)
-        validset = Whales(which_set="train", which_data=which_data, start=56671, stop=66671)
+        trainset = Whales(which_set="train", which_data=which_data, start=0, stop=40000)
+        validset = Whales(which_set="train", which_data=which_data, start=40000, stop=47841)
         tottrainset = Whales(which_set="train", which_data=which_data)
         testset = Whales(which_set="test", which_data=which_data)
         
