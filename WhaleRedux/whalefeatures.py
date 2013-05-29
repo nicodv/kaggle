@@ -23,7 +23,12 @@ def read_samples(dir):
             sample = aifc.open(os.path.join(dir, filename), 'r')
             nframes = sample.getnframes()
             strSig = sample.readframes(nframes)
-            allSigs[cnt,:] = np.fromstring(strSig, np.short).byteswap()
+            sig = np.fromstring(strSig, np.short).byteswap()
+            if nframes > 4000:
+                sig = sig[nframes-4000//2:(nframes-4000//2)+4000]
+            elif nframes < 4000:
+                sig = np.append(sig,np.zeros(4000-nframes))
+            allSigs[cnt,:] = sig
             sample.close()
     return filenames, allSigs
 
@@ -31,7 +36,7 @@ def read_targets():
     targets = []
     for cnt, filename in enumerate(os.listdir(traindir)):
         if os.path.isfile(os.path.join(traindir, filename)):
-            targets.append(re.search('(ms_TRAIN([0-9]*))',filename).group(1))
+            targets.append(int(re.search('(ms_TRAIN[0-9]*\_([0-9]*))',filename).group(2)))
     return targets
 
 def extract_audio_features(sigdata):
@@ -101,6 +106,7 @@ if __name__ == '__main__':
         np.save(os.path.join(datdir,curstr+'specfeat'), specfeat)
     
     targets = read_targets()
+    targets = np.array(targets)
     
     # convert to one-hot numpy array
     targets = np.array((targets,-targets+1)).T

@@ -2,17 +2,18 @@
 
 import numpy as np
 from theano import function
-import Whales.whaledata
+import WhaleRedux.whaledata
 
 from pylearn2.train import Train
 from pylearn2.models.mlp import MLP, ConvRectifiedLinear, Softmax, Linear, Sigmoid, RectifiedLinear
+from pylearn2.costs.mlp.dropout import Dropout
 from pylearn2.space import Conv2DSpace
 from pylearn2.training_algorithms.sgd import SGD, ExponentialDecay, MomentumAdjustor
 from pylearn2.termination_criteria import EpochCounter
 from pylearn2.costs.cost import MethodCost
 from sklearn.metrics.metrics import auc_score
 
-DATA_DIR = '/home/nico/datasets/Kaggle/Whales/'
+DATA_DIR = '/home/nico/datasets/Kaggle/WhaleRedux/'
 
 def get_conv2D(dim_input):
     config = {
@@ -62,7 +63,7 @@ def get_trainer(model, trainset, validset, epochs=50):
         learning_rate = 0.5,
         monitoring_batches = monitoring_batches,
         monitoring_dataset = validset,
-        cost = MethodCost(method='cost_from_X', supervised=1),
+        cost = Dropout(),
         termination_criterion = EpochCounter(epochs),
         update_callbacks = ExponentialDecay(decay_factor=1.0005, min_lr=0.001)
     )
@@ -100,12 +101,12 @@ def get_output(model, tdata, layerindex, batch_size=200):
 
 if __name__ == '__main__':
     
-    submission = True
+    submission = False
     
     ####################
     #   MEL SPECTRUM   #
     ####################
-    trainset,validset,testset = Whales.whaledata.get_dataset('melspectrum', tot=submission)
+    trainset,validset,testset = WhaleRedux.whaledata.get_dataset('melspectrum', tot=submission)
     
     # build and train classifiers for submodels
     model = get_conv2D([67,40,1])
@@ -126,14 +127,14 @@ if __name__ == '__main__':
         outtrainset = get_output(model,trainset,-2)
         outtestset = get_output(model,testset,-2)
         
-        np.save(DATA_DIR+'conv2altout_train', outtrainset)
-        np.save(DATA_DIR+'conv2altout_test', outtestset)
+        np.save(DATA_DIR+'conv2out_train', outtrainset)
+        np.save(DATA_DIR+'conv2out_test', outtestset)
     
     
     #########################
     #   SPECTRAL FEATURES   #
     #########################
-    trainset2,validset2,testset2 = Whales.whaledata.get_dataset('specfeat', tot=submission)
+    trainset2,validset2,testset2 = WhaleRedux.whaledata.get_dataset('specfeat', tot=submission)
     
     # build and train classifiers for submodels
     model2 = get_conv1D([67,1,24])
@@ -153,6 +154,6 @@ if __name__ == '__main__':
         outtrainset = get_output(model2,trainset2,-2)
         outtestset = get_output(model2,testset2,-2)
         
-        np.save(DATA_DIR+'conv1altout_train', outtrainset)
-        np.save(DATA_DIR+'conv1altout_test', outtestset)
+        np.save(DATA_DIR+'conv1out_train', outtrainset)
+        np.save(DATA_DIR+'conv1out_test', outtestset)
     
