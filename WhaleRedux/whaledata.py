@@ -80,7 +80,9 @@ def get_dataset(which_data, tot=False):
         pipeline = preprocessing.Pipeline()
         
         if which_data == 'melspectrum':
+            #pipeline.items.append(preprocessing.ExtractPatches(patch_shape=(8,8),num_patches=2*1000*1000))
             pipeline.items.append(preprocessing.Standardize(global_mean=True, global_std=True))
+            #pipeline.items.append(preprocessing.GlobalContrastNormalization(sqrt_bias=10., use_std=True))
             # ZCA = zero-phase component analysis
             # very similar to PCA, but preserves the look of the original image better
             pipeline.items.append(preprocessing.ZCA())
