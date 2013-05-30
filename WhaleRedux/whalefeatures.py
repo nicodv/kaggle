@@ -37,6 +37,8 @@ def read_samples(dir):
     return filenames, allSigs
 
 def read_targets():
+    '''Reads targets from filenames
+    '''
     targets = []
     for cnt, filename in enumerate(os.listdir(traindir)):
         if os.path.isfile(os.path.join(traindir, filename)):
