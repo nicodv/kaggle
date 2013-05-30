@@ -7,9 +7,11 @@ import yaafelib as yl
 import re
 import pandas as pd
 
-traindir ='/home/nico/datasets/Kaggle/WhaleRedux/train2'
-testdir  ='/home/nico/datasets/Kaggle/WhaleRedux/test2'
-datdir   ='/home/nico/datasets/Kaggle/WhaleRedux'
+datdir   = '/home/nico/datasets/Kaggle/WhaleRedux'
+traindir = os.path.join(DATA_DIR,'train2')
+testdir  = os.path.join(DATA_DIR,'test2')
+
+EXTRA_DATA = False
 
 SAMPLE_RATE = 2000
 SAMPLE_LENGTH = 2
@@ -27,6 +29,8 @@ def read_samples(dir):
             if nframes > 4000:
                 sig = sig[nframes-4000//2:(nframes-4000//2)+4000]
             elif nframes < 4000:
+                # appending is OK instead of symmetrical prepending and appending,
+                # since we're going to sample patches anyway
                 sig = np.append(sig,np.zeros(4000-nframes))
             allSigs[cnt,:] = sig
             sample.close()
@@ -43,8 +47,8 @@ def extract_audio_features(sigdata):
     '''Extracts a bunch of audio features using YAAFE
     '''
     window = 'Hanning'
-    block = 120
-    step = 60
+    block = 80
+    step = 40
     
     fp = yl.FeaturePlan(sample_rate=SAMPLE_RATE)
     fp.addFeature('CDOD: ComplexDomainOnsetDetection FFTWindow=%s blockSize=%d stepSize=%d' % (window, block, step))
@@ -68,30 +72,17 @@ def extract_audio_features(sigdata):
     
     return feats
 
-def _remove_bias(data, window=50):
-    '''Remove bias from signals
-        (in some data there are low-frequency
-        waves that we get rid of using a moving average)
-    '''
-    df = pd.DataFrame(data)
-    df = df - pd.rolling_mean(df, window, axis=1, min_periods=0)
-    return np.array(df)
-
 if __name__ == '__main__':
+    
+    targets = read_targets()
+    targets = np.array(targets)
     
     for curstr in ('train','test'):
         # read samples and store file numbers
         names, sigs = read_samples(eval(curstr+'dir'))
         
-        # original data is pretty clean, but still remove mean
-        sigs = sigs - np.mean(sigs, axis=1, keepdims=True)
-        
-        # make sure the data is sorted according to file number
-        # (necessary, since sorting is alphanumeric: 1, 10, 100, 2, etc.)
-        #names = np.array(names)
-        #sigs = sigs[names.argsort()]
-        
         # standardize all signals
+        sigs = sigs - np.mean(sigs, axis=1, keepdims=True)
         sigs = sigs / np.std(sigs, axis=1, keepdims=True)
         
         # now we can extract features
@@ -102,11 +93,22 @@ if __name__ == '__main__':
         specfeat = np.array([np.concatenate((x['MFCC'],x['CDOD'],x['LPC'],x['SF'], \
                     x['SpecStats'],x['SpecSlope'],x['SpecVar']),axis=1) for x in feats])
         
+        if EXTRA_DATA:
+            if curstr == 'train':
+                # generate extra training data by adding no-whale data to whale data
+                for ii in range(20000):
+                    # pick random examples of whale and no-whale examples
+                    indt = np.random.choice(np.where(targets==1), 1)
+                    indf = np.random.choice(np.where(targets==0), 1)
+                    # construct new training example
+                    xexmel = melspectrum[indt] + (np.random.rand()/2)*melspectrum[indf]
+                    xexsf = specfeat[indt] + (np.random.rand()/2)*specfeat[indf]
+                    # inserting to keep examples ordered (note: now overestimating autocorrelation)
+                    melspectrum = np.insert(melspectrum, indt, xexmel, axis=0)
+                    specfeat = np.insert(specfeat, indt, xexsf, axis=0)
+        
         np.save(os.path.join(datdir,curstr+'melspectrum'), melspectrum)
         np.save(os.path.join(datdir,curstr+'specfeat'), specfeat)
-    
-    targets = read_targets()
-    targets = np.array(targets)
     
     # convert to one-hot numpy array
     targets = np.array((targets,-targets+1)).T
