@@ -2,11 +2,14 @@
 
 import numpy as np
 import scipy
+import pandas as pd
 from sklearn import cross_validation, ensemble, metrics, linear_model
 
 DATA_DIR = '/home/nico/datasets/Kaggle/WhaleRedux/'
 
 def load_data():
+    targets = np.load(DATA_DIR+'targets.npy')[:,0]
+    
     c2train = np.load(DATA_DIR+'conv2out_train.npy')
     c2test = np.load(DATA_DIR+'conv2out_test.npy')
     c1train = np.load(DATA_DIR+'conv1out_train.npy')
@@ -26,17 +29,12 @@ def load_data():
     traindata = np.concatenate((c2train, c1train), axis=1)
     testdata = np.concatenate((c2test, c1test), axis=1)
     
-    return traindata, testdata
+    return traindata, testdata, targets
 
 def train_model(traindata, targets):
     
-    models = [
-                ensemble.GradientBoostingClassifier(n_estimators=500, learning_rate=0.05, \
-                max_depth=20, subsample=0.5, max_features=80, min_samples_leaf=20)
-# linear_model.LogisticRegression(penalty='l2', dual=True, C=1),
-# ensemble.RandomForestClassifier(n_estimators=500, max_features='log2', \
-# compute_importances=False, oob_score=False, min_samples_leaf=20, criterion='entropy')
-                ]
+    models = [ensemble.GradientBoostingClassifier(n_estimators=500, learning_rate=0.05, \
+                max_depth=20, subsample=0.5, max_features=80, min_samples_leaf=20)]
     
     # use StratifiedKFold, because survived 0/1 is not evenly distributed
     cv = cross_validation.StratifiedKFold(targets, n_folds=5)
@@ -55,9 +53,7 @@ def train_model(traindata, targets):
 
 if __name__ == '__main__':
     
-    targets = np.load(DATA_DIR+'targets.npy')[:,0]
-    
-    traindata, testdata = load_data()
+    traindata, testdata, targets = load_data()
     
     models = train_model(traindata, targets)
     
