@@ -5,6 +5,7 @@ Data class in pylearn2 format
 '''
 
 import os
+import copy
 import numpy as np
 
 from pylearn2.datasets.dense_design_matrix import DenseDesignMatrix, DefaultViewConverter
@@ -12,6 +13,49 @@ from pylearn2.datasets import preprocessing
 import pylearn2.utils.serial as serial
 
 DATA_DIR = '/home/nico/datasets/Kaggle/WhaleRedux/'
+
+
+class ExampleWiseExtractPatches(preprocessing.ExtractPatches):
+    """ Converts an image dataset into a dataset of patches
+        extracted at random from the original dataset, example-wise. """
+    def __init__(self, patch_shape, num_patches, rng=None):
+        super(ExampleWiseExtractPatches).__init__(patch_shape, num_patches, rng=None)
+    
+    def apply(self, dataset, can_fit=False):
+        rng = copy.copy(self.start_rng)
+
+        X = dataset.get_topological_view()
+
+        num_topological_dimensions = len(X.shape) - 2
+
+        if num_topological_dimensions != len(self.patch_shape):
+            raise ValueError("ExtractPatches with "
+                             + str(len(self.patch_shape))
+                             + " topological dimensions called on "
+                             + "dataset with "
+                             + str(num_topological_dimensions) + ".")
+
+        # batch size
+        output_shape = [self.num_patches]
+        # topological dimensions
+        for dim in self.patch_shape:
+            output_shape.append(dim)
+        # number of channels
+        output_shape.append(X.shape[-1])
+        output = np.zeros(output_shape, dtype=X.dtype)
+        channel_slice = slice(0, X.shape[-1])
+        for i in xrange(self.num_patches):
+            args = []
+            args.append(rng.randint(X.shape[0]))
+
+            for j in xrange(num_topological_dimensions):
+                max_coord = X.shape[j + 1] - self.patch_shape[j]
+                coord = rng.randint(max_coord + 1)
+                args.append(slice(coord, coord + self.patch_shape[j]))
+            args.append(channel_slice)
+            output[i, :] = X[args]
+        dataset.set_topological_view(output)
+        dataset.y = None
 
 
 class WhaleRedux(DenseDesignMatrix):
