@@ -5,11 +5,10 @@ import aifc
 import numpy as np
 import yaafelib as yl
 import re
-import pandas as pd
 
 datdir   = '/home/nico/datasets/Kaggle/WhaleRedux'
-traindir = os.path.join(DATA_DIR,'train2')
-testdir  = os.path.join(DATA_DIR,'test2')
+traindir = os.path.join(datdir,'train2')
+testdir  = os.path.join(datdir,'test2')
 
 EXTRA_DATA = False
 
@@ -34,6 +33,7 @@ def read_samples(dir):
                 sig = np.append(sig,np.zeros(4000-nframes))
             allSigs[cnt,:] = sig
             sample.close()
+    
     return filenames, allSigs
 
 def read_targets():
@@ -49,8 +49,8 @@ def extract_audio_features(sigdata):
     '''Extracts a bunch of audio features using YAAFE
     '''
     window = 'Hanning'
-    block = 80
-    step = 40
+    block = 120
+    step = 60
     
     fp = yl.FeaturePlan(sample_rate=SAMPLE_RATE)
     fp.addFeature('CDOD: ComplexDomainOnsetDetection FFTWindow=%s blockSize=%d stepSize=%d' % (window, block, step))
@@ -82,6 +82,9 @@ if __name__ == '__main__':
     for curstr in ('train','test'):
         # read samples and store file numbers
         names, sigs = read_samples(eval(curstr+'dir'))
+        # save names for submissions
+        if curstr == 'test':
+            np.save(os.path.join(datdir,'filenames'), names)
         
         # standardize all signals
         sigs = sigs - np.mean(sigs, axis=1, keepdims=True)
@@ -109,10 +112,11 @@ if __name__ == '__main__':
                     melspectrum = np.insert(melspectrum, indt, xexmel, axis=0)
                     specfeat = np.insert(specfeat, indt, xexsf, axis=0)
         
-        np.save(os.path.join(datdir,curstr+'melspectrum'), melspectrum)
-        np.save(os.path.join(datdir,curstr+'specfeat'), specfeat)
+        np.save(os.path.join(datdir,curstr+'_melspectrum'), melspectrum)
+        np.save(os.path.join(datdir,curstr+'_specfeat'), specfeat)
     
     # convert to one-hot numpy array
     targets = np.array((targets,-targets+1)).T
     
     np.save(os.path.join(datdir,'targets'), targets)
+    
