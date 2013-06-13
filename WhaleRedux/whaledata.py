@@ -41,10 +41,12 @@ class WhaleRedux(DenseDesignMatrix):
             
         if which_data == 'melspectrum':
             # 2D data with 1 channel
-            view_converter = DefaultViewConverter((16,16,1))
+            # do not change in case you extract patches, pylearn handles this!
+            view_converter = DefaultViewConverter((67,40,1))
         elif which_data == 'specfeat':
             # 24 channels with 1D data
-            view_converter = DefaultViewConverter((16,1,24))
+            # do not change in case you extract patches, pylearn handles this!
+            view_converter = DefaultViewConverter((67,1,24))
             
         super(WhaleRedux,self).__init__(X=X, y=y, view_converter=view_converter)
         
