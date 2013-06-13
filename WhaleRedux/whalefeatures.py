@@ -10,7 +10,7 @@ datdir   = '/home/nico/datasets/Kaggle/WhaleRedux'
 traindir = os.path.join(datdir,'train2')
 testdir  = os.path.join(datdir,'test2')
 
-EXTRA_DATA = True
+EXTRA_DATA = False
 
 SAMPLE_RATE = 2000
 SAMPLE_LENGTH = 2
