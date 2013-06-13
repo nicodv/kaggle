@@ -10,7 +10,7 @@ datdir   = '/home/nico/datasets/Kaggle/WhaleRedux'
 traindir = os.path.join(datdir,'train2')
 testdir  = os.path.join(datdir,'test2')
 
-EXTRA_DATA = False
+EXTRA_DATA = True
 
 SAMPLE_RATE = 2000
 SAMPLE_LENGTH = 2
@@ -49,8 +49,8 @@ def extract_audio_features(sigdata):
     '''Extracts a bunch of audio features using YAAFE
     '''
     window = 'Hanning'
-    block = 120
-    step = 60
+    block = 80
+    step = 40
     
     fp = yl.FeaturePlan(sample_rate=SAMPLE_RATE)
     fp.addFeature('CDOD: ComplexDomainOnsetDetection FFTWindow=%s blockSize=%d stepSize=%d' % (window, block, step))
@@ -103,14 +103,15 @@ if __name__ == '__main__':
                 # generate extra training data by adding no-whale data to whale data
                 for ii in range(20000):
                     # pick random examples of whale and no-whale examples
-                    indt = np.random.choice(np.where(targets==1), 1)
-                    indf = np.random.choice(np.where(targets==0), 1)
+                    indt = np.random.choice(np.where(targets==1)[0], 1)[0]
+                    indf = np.random.choice(np.where(targets==0)[0], 1)[0]
                     # construct new training example
                     xexmel = melspectrum[indt] + (np.random.rand()/2)*melspectrum[indf]
                     xexsf = specfeat[indt] + (np.random.rand()/2)*specfeat[indf]
                     # inserting to keep examples ordered (note: now overestimating autocorrelation)
                     melspectrum = np.insert(melspectrum, indt, xexmel, axis=0)
                     specfeat = np.insert(specfeat, indt, xexsf, axis=0)
+                    targets = np.insert(targets, indt, 1, axis=0)
         
         np.save(os.path.join(datdir,curstr+'_melspectrum'), melspectrum)
         np.save(os.path.join(datdir,curstr+'_specfeat'), specfeat)
