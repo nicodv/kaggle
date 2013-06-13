@@ -49,8 +49,8 @@ def extract_audio_features(sigdata):
     '''Extracts a bunch of audio features using YAAFE
     '''
     window = 'Hanning'
-    block = 80
-    step = 40
+    block = 120
+    step = 60
     
     fp = yl.FeaturePlan(sample_rate=SAMPLE_RATE)
     fp.addFeature('CDOD: ComplexDomainOnsetDetection FFTWindow=%s blockSize=%d stepSize=%d' % (window, block, step))
