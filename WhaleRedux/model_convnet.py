@@ -108,7 +108,7 @@ if __name__ == '__main__':
     trainset,validset,testset = WhaleRedux.whaledata.get_dataset('melspectrum', tot=submission)
     
     # build and train classifiers for submodels
-    model = get_conv2D([67,40,1], batch_size=batch_size)
+    model = get_conv2D([16,16,1], batch_size=batch_size)
     get_trainer(model, trainset, validset, epochs=20, batch_size=batch_size).main_loop()
     
     # validate model
