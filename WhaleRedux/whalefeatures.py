@@ -49,6 +49,7 @@ def extract_audio_features(sigdata):
     '''Extracts a bunch of audio features using YAAFE
     '''
     window = 'Hanning'
+    # using 80 / 40 here produces NaNs in mel spectrum, for some reason
     block = 120
     step = 60
     
