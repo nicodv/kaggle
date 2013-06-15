@@ -102,7 +102,9 @@ if __name__ == '__main__':
         if EXTRA_DATA:
             if curstr == 'train':
                 # generate extra training data by adding no-whale data to whale data
-                for ii in range(20000):
+                for ii in range(10000):
+                    if np.remainder(ii,10) == 0:
+                        print(str(ii))
                     # pick random examples of whale and no-whale examples
                     indt = np.random.choice(np.where(targets==1)[0], 1)[0]
                     indf = np.random.choice(np.where(targets==0)[0], 1)[0]

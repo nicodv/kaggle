@@ -22,12 +22,14 @@ def get_conv2D(dim_input, batch_size=200):
         'batch_size': batch_size,
         'input_space': Conv2DSpace(shape=dim_input[:2], num_channels=dim_input[2]),
         'layers': [
-        ConvRectifiedLinear(layer_name='h0', output_channels=30, irange=.04, init_bias=0., max_kernel_norm=1.9365,
-            kernel_shape=[5, 5], border_mode = 'valid', pool_shape=[4, 4], pool_stride=[2, 2], W_lr_scale=0.64),
-        ConvRectifiedLinear(layer_name='h1', output_channels=40, irange=.05, init_bias=0., max_kernel_norm=1.9365,
-            kernel_shape=[3, 3], pool_shape=[4, 4], pool_stride=[4, 4], W_lr_scale=1.),
-        ConvRectifiedLinear(layer_name='h2', output_channels=50, irange=.05, init_bias=0., max_kernel_norm=1.9365,
-            kernel_shape=[3, 3], pool_shape=[2, 2], pool_stride=[2, 2], W_lr_scale=1.),
+        ConvRectifiedLinear(layer_name='h0', output_channels=20, irange=.04, init_bias=0., max_kernel_norm=1.9365,
+            kernel_shape=[5, 5], border_mode = 'full', pool_shape=[8, 4], pool_stride=[3, 2], W_lr_scale=0.64),
+        ConvRectifiedLinear(layer_name='h1', output_channels=40, irange=.04, init_bias=0., max_kernel_norm=1.9365,
+            kernel_shape=[3, 3], border_mode = 'valid', pool_shape=[4, 4], pool_stride=[2, 2], W_lr_scale=0.64),
+        ConvRectifiedLinear(layer_name='h2', output_channels=60, irange=.04, init_bias=0., max_kernel_norm=1.9365,
+            kernel_shape=[3, 3], border_mode = 'valid', pool_shape=[2, 2], pool_stride=[1, 1], W_lr_scale=0.64),
+        ConvRectifiedLinear(layer_name='h3', output_channels=80, irange=.04, init_bias=0., max_kernel_norm=1.9365,
+            kernel_shape=[3, 3], pool_shape=[2, 2], pool_stride=[2, 2], W_lr_scale=0.64),
         Softmax(layer_name='y', n_classes=2, istdev=.025, W_lr_scale=0.25)
         ]
     }
@@ -39,13 +41,13 @@ def get_conv1D(dim_input, batch_size=200):
         'input_space': Conv2DSpace(shape=dim_input[:2], num_channels=dim_input[2]),
         'layers': [
         ConvRectifiedLinear(layer_name='h0', output_channels=30, irange=.04, init_bias=0.5, max_kernel_norm=1.9365,
-            kernel_shape=[7, 1], pool_shape=[4, 1], pool_stride=[3, 1], W_lr_scale=0.64),
+            kernel_shape=[5, 1], border_mode = 'full', pool_shape=[8, 1], pool_stride=[3, 1], W_lr_scale=0.64),
         ConvRectifiedLinear(layer_name='h1', output_channels=40, irange=.05, init_bias=0., max_kernel_norm=1.9365,
-            kernel_shape=[5, 1], pool_shape=[4, 1], pool_stride=[1, 1], W_lr_scale=1.),
+            kernel_shape=[3, 1], pool_shape=[4, 1], pool_stride=[4, 1], W_lr_scale=0.64),
         ConvRectifiedLinear(layer_name='h2', output_channels=50, irange=.05, init_bias=0., max_kernel_norm=1.9365,
-            kernel_shape=[5, 1], pool_shape=[4, 1], pool_stride=[1, 1], W_lr_scale=1.),
+            kernel_shape=[3, 1], pool_shape=[4, 1], pool_stride=[2, 1], W_lr_scale=0.64),
         ConvRectifiedLinear(layer_name='h3', output_channels=60, irange=.05, init_bias=0., max_kernel_norm=1.9365,
-            kernel_shape=[3, 1], pool_shape=[4, 1], pool_stride=[2, 1], W_lr_scale=1.),
+            kernel_shape=[3, 1], pool_shape=[4, 1], pool_stride=[2, 1], W_lr_scale=0.64),
         Softmax(layer_name='y', n_classes=2, irange=.025, W_lr_scale=0.25)
         ]
     }
@@ -59,11 +61,11 @@ def get_trainer(model, trainset, validset, epochs=20, batch_size=200):
         learning_rate = 0.1,
         monitoring_batches = monitoring_batches,
         monitoring_dataset = validset,
-        cost = Dropout(input_include_probs={'h0': 0.8, 'h1': 1., 'h2': 1., 'y': 0.5},
-                        input_scales={'h0': 1./0.8, 'h1': 1./1., 'h2': 1./1., 'y': 1./0.5},
+        cost = Dropout(input_include_probs={'h0': 0.8, 'h1': 0.8, 'h2': 0.8, 'h3': 0.8, 'y': 0.5},
+                        input_scales={'h0': 1./0.8, 'h1': 1./0.8, 'h2': 1./0.8, 'h3': 1./0.8, 'y': 1./0.5},
                         default_input_include_prob=0.5, default_input_scale=1./0.5),
         termination_criterion = EpochCounter(epochs),
-        update_callbacks = ExponentialDecay(decay_factor=1.0005, min_lr=0.001)
+        update_callbacks = ExponentialDecay(decay_factor=1.0001, min_lr=0.001)
     )
     return Train(model=model, algorithm=train_algo, dataset=trainset, save_freq=0, save_path='epoch', \
             extensions=[MomentumAdjustor(final_momentum=0.9, start=0, saturate=int(epochs*0.8)), ])
@@ -108,8 +110,8 @@ if __name__ == '__main__':
     trainset,validset,testset = WhaleRedux.whaledata.get_dataset('melspectrum', tot=submission)
     
     # build and train classifiers for submodels
-    model = get_conv2D([16,16,1], batch_size=batch_size)
-    get_trainer(model, trainset, validset, epochs=20, batch_size=batch_size).main_loop()
+    model = get_conv2D([67,40,1], batch_size=batch_size)
+    get_trainer(model, trainset, validset, epochs=50, batch_size=batch_size).main_loop()
     
     # validate model
     if not submission:
@@ -139,8 +141,8 @@ if __name__ == '__main__':
     trainset2,validset2,testset2 = WhaleRedux.whaledata.get_dataset('specfeat', tot=submission)
     
     # build and train classifiers for submodels
-    model2 = get_conv1D([16,1,24], batch_size=batch_size)
-    get_trainer(model2, trainset2, validset2, epochs=40, batch_size=batch_size).main_loop()
+    model2 = get_conv1D([67,1,24], batch_size=batch_size)
+    get_trainer(model2, trainset2, validset2, epochs=50, batch_size=batch_size).main_loop()
     
     # validate model
     if not submission:
