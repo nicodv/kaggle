@@ -2,7 +2,7 @@
 
 import os
 import numpy as np
-import scipy
+import Oger
 import pandas as pd
 from sklearn import cross_validation, ensemble, metrics
 
@@ -21,8 +21,12 @@ def load_data():
     
     return traindata, testdata, targets
 
-def train_model(traindata, targets):
-    
+def run_reservoir(data):
+    reservoir = Oger.nodes.LeakyReservoirNode(leak_rate=1.0, input_dim=480, output_dim=500, \
+        spectral_radius=0.8, bias_scaling=1., input_scaling=0.1)
+    return reservoir.execute(data)
+
+def get_classifier(traindata, targets):
     models = [ensemble.GradientBoostingClassifier(n_estimators=500, learning_rate=0.05, \
                 max_depth=20, subsample=0.5, max_features=80, min_samples_leaf=20)]
     
@@ -33,7 +37,7 @@ def train_model(traindata, targets):
     for i in range(len(models)):
         # get scores
         scores[i] = cross_validation.cross_val_score(models[i], traindata, targets, \
-                    cv=cv, n_jobs=-1, score_func=metrics.auc_score)
+                    cv=cv, n_jobs=-1, scoring='roc_auc')
         print "Cross-validation accuracy on the training set for model %d:" % i
         print "%0.3f (+/-%0.03f)" % (scores[i].mean(), scores[i].std() / 2)
         
@@ -46,10 +50,16 @@ if __name__ == '__main__':
     traindata, testdata, targets = load_data()
     fn = np.load(os.path.join(DATA_DIR,'filenames.npy'))
     
-    models = train_model(traindata, targets)
+    # run reservoir and add to data
+    res_train = run_reservoir(traindata)
+    res_test = run_reservoir(testdata)
+    traindata = np.concatenate((traindata, res_train), axis=1)
+    testdata = np.concatenate((testdata, res_test), axis=1)
+    
+    models = get_classifier(traindata, targets)
     
     output = models[0].predict_proba(testdata)
     
     # save test output as submission
-    subm = pd.DataFrame({'clip': fn, 'probability': np.round(output[:,0])})
+    subm = pd.DataFrame({'clip': fn, 'probability': output[:,0]})
     subm.to_csv(DATA_DIR+'model_hybrid.csv', header=True, index=False)

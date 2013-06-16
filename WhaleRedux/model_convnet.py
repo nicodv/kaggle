@@ -40,14 +40,14 @@ def get_conv1D(dim_input, batch_size=200):
         'batch_size': batch_size,
         'input_space': Conv2DSpace(shape=dim_input[:2], num_channels=dim_input[2]),
         'layers': [
-        ConvRectifiedLinear(layer_name='h0', output_channels=30, irange=.04, init_bias=0.5, max_kernel_norm=1.9365,
+        ConvRectifiedLinear(layer_name='h0', output_channels=20, irange=.04, init_bias=0., max_kernel_norm=1.9365,
             kernel_shape=[5, 1], border_mode = 'full', pool_shape=[8, 1], pool_stride=[3, 1], W_lr_scale=0.64),
         ConvRectifiedLinear(layer_name='h1', output_channels=40, irange=.05, init_bias=0., max_kernel_norm=1.9365,
-            kernel_shape=[3, 1], pool_shape=[4, 1], pool_stride=[4, 1], W_lr_scale=0.64),
-        ConvRectifiedLinear(layer_name='h2', output_channels=50, irange=.05, init_bias=0., max_kernel_norm=1.9365,
             kernel_shape=[3, 1], pool_shape=[4, 1], pool_stride=[2, 1], W_lr_scale=0.64),
-        ConvRectifiedLinear(layer_name='h3', output_channels=60, irange=.05, init_bias=0., max_kernel_norm=1.9365,
-            kernel_shape=[3, 1], pool_shape=[4, 1], pool_stride=[2, 1], W_lr_scale=0.64),
+        ConvRectifiedLinear(layer_name='h2', output_channels=60, irange=.05, init_bias=0., max_kernel_norm=1.9365,
+            kernel_shape=[3, 1], pool_shape=[2, 1], pool_stride=[1, 1], W_lr_scale=0.64),
+        ConvRectifiedLinear(layer_name='h3', output_channels=80, irange=.05, init_bias=0., max_kernel_norm=1.9365,
+            kernel_shape=[3, 1], pool_shape=[2, 1], pool_stride=[2, 1], W_lr_scale=0.64),
         Softmax(layer_name='y', n_classes=2, irange=.025, W_lr_scale=0.25)
         ]
     }
@@ -123,8 +123,8 @@ if __name__ == '__main__':
         fn = np.load(os.path.join(DATA_DIR,'filenames.npy'))
         outtestset = get_output(model,testset,-1)[:,0]
         
-        output = pd.DataFrame({'clip': fn, 'probability': outtestset})
         # save test output as submission
+        output = pd.DataFrame({'clip': fn, 'probability': outtestset})
         output.to_csv(DATA_DIR+'model_conv2net.csv', header=True, index=False)
         
         # construct data sets with model output
@@ -158,9 +158,9 @@ if __name__ == '__main__':
         # save test output as submission
         output2.to_csv(DATA_DIR+'model_conv1net.csv', header=True, index=False)
         
-        outtrainset = get_output(model2,trainset2,-2)
-        outtestset = get_output(model2,testset2,-2)
+        outtrainset2 = get_output(model2,trainset2,-2)
+        outtestset2 = get_output(model2,testset2,-2)
         
-        np.save(DATA_DIR+'conv1out_train', outtrainset)
-        np.save(DATA_DIR+'conv1out_test', outtestset)
+        np.save(DATA_DIR+'conv1out_train', outtrainset2)
+        np.save(DATA_DIR+'conv1out_test', outtestset2)
     

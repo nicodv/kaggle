@@ -18,9 +18,14 @@ SAMPLE_LENGTH = 2
 def read_samples(dir):
     allSigs = np.zeros( (len(os.listdir(dir)),SAMPLE_LENGTH*SAMPLE_RATE) )
     filenames = []
+    targets = []
     for cnt, filename in enumerate(os.listdir(dir)):
         if os.path.isfile(os.path.join(dir, filename)):
             filenames.append(filename)
+            if dir == traindir:
+                targets.append(int(re.search('(ms_TRAIN[0-9]*\_([0-9]*))',filename).group(2)))
+            else:
+                targets.append(0)
             sample = aifc.open(os.path.join(dir, filename), 'r')
             nframes = sample.getnframes()
             strSig = sample.readframes(nframes)
@@ -34,16 +39,9 @@ def read_samples(dir):
             allSigs[cnt,:] = sig
             sample.close()
     
-    return filenames, allSigs
-
-def read_targets():
-    '''Reads targets from filenames
-    '''
-    targets = []
-    for cnt, filename in enumerate(os.listdir(traindir)):
-        if os.path.isfile(os.path.join(traindir, filename)):
-            targets.append(int(re.search('(ms_TRAIN[0-9]*\_([0-9]*))',filename).group(2)))
-    return targets
+    targets = np.array(targets)
+    
+    return filenames, targets, allSigs
 
 def extract_audio_features(sigdata):
     '''Extracts a bunch of audio features using YAAFE
@@ -77,12 +75,17 @@ def extract_audio_features(sigdata):
 
 if __name__ == '__main__':
     
-    targets = read_targets()
-    targets = np.array(targets)
-    
     for curstr in ('train','test'):
         # read samples and store file numbers
-        names, sigs = read_samples(eval(curstr+'dir'))
+        names, targs, sigs = read_samples(eval(curstr+'dir'))
+        
+        #sort everything properly
+        names = np.array(names)
+        if curstr == 'train':
+            targets = targs[names.argsort()]
+        sigs = sigs[names.argsort()]
+        names.sort()
+        
         # save names for submissions
         if curstr == 'test':
             np.save(os.path.join(datdir,'filenames'), names)
