@@ -4,7 +4,7 @@ import os
 import numpy as np
 import Oger
 import pandas as pd
-from sklearn import cross_validation, ensemble, metrics
+from sklearn import cross_validation, ensemble
 
 DATA_DIR = '/home/nico/datasets/Kaggle/WhaleRedux/'
 
@@ -22,13 +22,13 @@ def load_data():
     return traindata, testdata, targets
 
 def run_reservoir(data):
-    reservoir = Oger.nodes.LeakyReservoirNode(leak_rate=1.0, input_dim=480, output_dim=500, \
-        spectral_radius=0.8, bias_scaling=1., input_scaling=0.1)
+    reservoir = Oger.nodes.LeakyReservoirNode(leak_rate=0.9, input_dim=480, output_dim=2000, \
+        spectral_radius=0.9, bias_scaling=0, input_scaling=1)
     return reservoir.execute(data)
 
 def get_classifier(traindata, targets):
-    models = [ensemble.GradientBoostingClassifier(n_estimators=500, learning_rate=0.05, \
-                max_depth=20, subsample=0.5, max_features=80, min_samples_leaf=20)]
+    models = [ensemble.GradientBoostingClassifier(n_estimators=1000, learning_rate=0.05, \
+                max_depth=20, subsample=0.25, max_features=120, min_samples_leaf=20)]
     
     # use StratifiedKFold, because survived 0/1 is not evenly distributed
     cv = cross_validation.StratifiedKFold(targets, n_folds=5)
@@ -51,10 +51,10 @@ if __name__ == '__main__':
     fn = np.load(os.path.join(DATA_DIR,'filenames.npy'))
     
     # run reservoir and add to data
-    res_train = run_reservoir(traindata)
-    res_test = run_reservoir(testdata)
-    traindata = np.concatenate((traindata, res_train), axis=1)
-    testdata = np.concatenate((testdata, res_test), axis=1)
+    traindata = res_train = run_reservoir(traindata)
+    testdata = res_test = run_reservoir(testdata)
+    #traindata = np.concatenate((traindata, res_train), axis=1)
+    #testdata = np.concatenate((testdata, res_test), axis=1)
     
     models = get_classifier(traindata, targets)
     
