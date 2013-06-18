@@ -28,7 +28,7 @@ def initial_read():
     
 class Digits(DenseDesignMatrix):
     
-    def __init__(self, which_set, start=None, stop=None, preprocessor=None):
+    def __init__(self, which_set, start=None, stop=None, preprocessor=None, axes=['c', 0, 1, 'b']):
         assert which_set in ['train','test']
         
         X = np.load(os.path.join(DATA_DIR,which_set+'.npy'))
@@ -38,10 +38,18 @@ class Digits(DenseDesignMatrix):
         
         if which_set == 'test':
             # dummy targets
-            y = np.zeros((X.shape[0],2))
+            y = np.zeros((X.shape[0],10))
         else:
             y = np.load(os.path.join(DATA_DIR,'targets.npy'))
-            
+            one_hot = np.zeros((y.shape[0],10),dtype='float32')
+            for i in xrange(y.shape[0]):
+                    one_hot[i,y[i]] = 1.
+                y = one_hot
+        
+        def dimshuffle(b01c):
+            default = ('b', 0, 1, 'c')
+            return b01c.transpose(*[default.index(axis) for axis in axes])
+        
         if start is not None:
             assert start >= 0
             assert stop > start
@@ -49,12 +57,14 @@ class Digits(DenseDesignMatrix):
             X = X[start:stop, :]
             y = y[start:stop]
             assert X.shape[0] == y.shape[0]
-            
-        # 2D data with 1 channel
-        # do not change in case you extract patches, pylearn handles this!
-        view_converter = DefaultViewConverter((28,28,1), axis=['b', 0, 1, 'c'])
         
-        super(Digits,self).__init__(X=X, y=y, view_converter=view_converter)
+        topo_view = X
+        m, r, c = topo_view.shape
+        assert r == 28
+        assert c == 28
+        topo_view = topo_view.reshape(m,r,c,1)
+        
+        super(Digits,self).__init__(topo_view = dimshuffle(topo_view), y=y, axes=axes)
         
         assert not np.any(np.isnan(self.X))
         
@@ -83,8 +93,8 @@ def get_dataset(tot=False):
     else:
         
         print 'loading raw data...'
-        trainset = Digits(which_set='train', start=0, stop=40000)
-        validset = Digits(which_set='train', start=40000, stop=47841)
+        trainset = Digits(which_set='train', start=0, stop=50000)
+        validset = Digits(which_set='train', start=50000, stop=60000)
         tottrainset = Digits(which_set='train')
         testset = Digits(which_set='test')
         
