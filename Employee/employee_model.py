@@ -6,30 +6,32 @@ from itertools import combinations
 import numpy as np
 import pandas as pd
 
+DATA_DIR = 'home/nico/datasets/Kaggle/Employees'
+
 SEED = 42
 
 def group_data(data, degree=3, hash=hash):
-    """ 
+    ''' 
     numpy.array -> numpy.array
     
     Groups all columns of data into all combinations of triples
-    """
+    '''
     new_data = []
     m,n = data.shape
-    for indicies in combinations(range(n), degree):
-        new_data.append([hash(tuple(v)) for v in data[:,indicies]])
+    for indices in combinations(range(n), degree):
+        new_data.append([hash(tuple(v)) for v in data[:,indices]])
     return array(new_data).T
 
 def OneHotEncoder(data, keymap=None):
-     """
+     '''
      OneHotEncoder takes data matrix with categorical columns and
      converts it to a sparse binary matrix.
      
-     Returns sparse binary matrix and keymap mapping categories to indicies.
+     Returns sparse binary matrix and keymap mapping categories to indices.
      If a keymap is supplied on input it will be used instead of creating one
      and any categories appearing in the data that are not in the keymap are
      ignored
-     """
+     '''
      if keymap is None:
           keymap = []
           for col in data.T:
@@ -71,7 +73,7 @@ def cv_loop(X, y, model, N):
         mean_auc += auc
     return mean_auc/N
     
-def main(train='train.csv', test='test.csv', submit='logistic_pred.csv'):    
+def main(train=DATA_DIR+'train.csv', test=DATA_DIR+'test.csv', submit=DATA_DIR+'submission.csv'):    
     print "Reading dataset..."
     train_data = pd.read_csv(train)
     test_data = pd.read_csv(test)
@@ -105,7 +107,7 @@ def main(train='train.csv', test='test.csv', submit='logistic_pred.csv'):
     
     print "Performing greedy feature selection..."
     score_hist = []
-    N = 10
+    N = 5
     good_features = set([])
     # Greedy feature selection loop
     while len(score_hist) < 2 or score_hist[-1][0] > score_hist[-2][0]:
@@ -117,8 +119,8 @@ def main(train='train.csv', test='test.csv', submit='logistic_pred.csv'):
                 score = cv_loop(Xt, y, model, N)
                 scores.append((score, f))
                 print "Feature: %i Mean AUC: %f" % (f, score)
-        good_features.add(sorted(scores)[-1][1])
-        score_hist.append(sorted(scores)[-1])
+        good_features.add(max(scores)[1])
+        score_hist.append(max(scores))
         print "Current features: %s" % sorted(list(good_features))
     
     # Remove last added feature from good_features
@@ -136,7 +138,7 @@ def main(train='train.csv', test='test.csv', submit='logistic_pred.csv'):
         score = cv_loop(Xt, y, model, N)
         score_hist.append((score,C))
         print "C: %f Mean AUC: %f" %(C, score)
-    bestC = sorted(score_hist)[-1][1]
+    bestC = max(score_hist)[1]
     print "Best C value: %f" % (bestC)
     
     print "Performing One Hot Encoding on entire dataset..."
@@ -152,9 +154,10 @@ def main(train='train.csv', test='test.csv', submit='logistic_pred.csv'):
     preds = model.predict_proba(X_test)[:,1]
     create_test_submission(submit, preds)
     
+
 if __name__ == "__main__":
-    args = { 'train':  'train.csv',
-             'test':   'test.csv',
-             'submit': 'logistic_regression_pred.csv' }
+    args = { 'train':  DATA_DIR+'train.csv',
+             'test':   DATA_DIR+'test.csv',
+             'submit': DATA_DIR+'submission.csv' }
     main(**args)
     
