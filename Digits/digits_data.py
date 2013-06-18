@@ -52,7 +52,7 @@ class Digits(DenseDesignMatrix):
             
         # 2D data with 1 channel
         # do not change in case you extract patches, pylearn handles this!
-        view_converter = DefaultViewConverter((28,28,1))
+        view_converter = DefaultViewConverter((28,28,1), axis=['b', 0, 1, 'c'])
         
         super(Digits,self).__init__(X=X, y=y, view_converter=view_converter)
         
