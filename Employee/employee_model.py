@@ -1,5 +1,4 @@
-
-from sklearn import metrics, cross_validation, linear_model
+from sklearn import metrics, cross_validation, linear_model, decomposition
 from scipy import sparse
 from itertools import combinations
 
@@ -77,6 +76,8 @@ def main(train=DATA_DIR+'train.csv', test=DATA_DIR+'test.csv', submit=DATA_DIR+'
     print "Reading dataset..."
     train_data = pd.read_csv(train)
     test_data = pd.read_csv(test)
+    
+    # note: last column is duplicate, dropped here
     all_data = np.vstack((train_data.ix[:,1:-1], test_data.ix[:,1:-1]))
 
     num_train = np.shape(train_data)[0]
@@ -85,6 +86,8 @@ def main(train=DATA_DIR+'train.csv', test=DATA_DIR+'test.csv', submit=DATA_DIR+'
     print "Transforming data..."
     dp = group_data(all_data, degree=2) 
     dt = group_data(all_data, degree=3)
+    
+    # RandomizedPCA? SparsePCA? LDA?
 
     y = np.array(train_data.ACTION)
     X = all_data[:num_train]
@@ -99,7 +102,7 @@ def main(train=DATA_DIR+'train.csv', test=DATA_DIR+'test.csv', submit=DATA_DIR+'
     X_test_all = np.hstack((X_test, X_test_2, X_test_3))
     num_features = X_train_all.shape[1]
     
-    model = linear_model.LogisticRegression()
+    model = linear_model.LogisticRegression(dual=False)
     
     # Xts holds one hot encodings for each individual feature in memory
     # speeding up feature selection 
@@ -107,7 +110,7 @@ def main(train=DATA_DIR+'train.csv', test=DATA_DIR+'test.csv', submit=DATA_DIR+'
     
     print "Performing greedy feature selection..."
     score_hist = []
-    N = 5
+    N = 10
     good_features = set([])
     # Greedy feature selection loop
     while len(score_hist) < 2 or score_hist[-1][0] > score_hist[-2][0]:
@@ -133,15 +136,16 @@ def main(train=DATA_DIR+'train.csv', test=DATA_DIR+'test.csv', submit=DATA_DIR+'
     # Hyperparameter selection loop
     score_hist = []
     Xt = sparse.hstack([Xts[j] for j in good_features]).tocsr()
-    Cvals = np.logspace(-4, 4, 15, base=2)
+    Cvals = np.logspace(-4, 4, 20, base=2)
     for C in Cvals:
         model.C = C
         score = cv_loop(Xt, y, model, N)
         score_hist.append((score,C))
         print "C: %f Mean AUC: %f" %(C, score)
     bestC = max(score_hist)[1]
+    model.C = bestC
     print "Best C value: %f" % (bestC)
-    # 2.208179
+    # approx. 2.2
     
     print "Performing One Hot Encoding on entire dataset..."
     Xt = np.vstack((X_train_all[:,good_features], X_test_all[:,good_features]))
