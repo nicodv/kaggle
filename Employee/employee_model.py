@@ -1,4 +1,4 @@
-from numpy import array, hstack
+
 from sklearn import metrics, cross_validation, linear_model
 from scipy import sparse
 from itertools import combinations
@@ -6,7 +6,7 @@ from itertools import combinations
 import numpy as np
 import pandas as pd
 
-DATA_DIR = 'home/nico/datasets/Kaggle/Employees'
+DATA_DIR = '/home/nico/datasets/Kaggle/Employee/'
 
 SEED = 42
 
@@ -20,7 +20,7 @@ def group_data(data, degree=3, hash=hash):
     m,n = data.shape
     for indices in combinations(range(n), degree):
         new_data.append([hash(tuple(v)) for v in data[:,indices]])
-    return array(new_data).T
+    return np.array(new_data).T
 
 def OneHotEncoder(data, keymap=None):
      '''
@@ -86,7 +86,7 @@ def main(train=DATA_DIR+'train.csv', test=DATA_DIR+'test.csv', submit=DATA_DIR+'
     dp = group_data(all_data, degree=2) 
     dt = group_data(all_data, degree=3)
 
-    y = array(train_data.ACTION)
+    y = np.array(train_data.ACTION)
     X = all_data[:num_train]
     X_2 = dp[:num_train]
     X_3 = dt[:num_train]
@@ -127,6 +127,7 @@ def main(train=DATA_DIR+'train.csv', test=DATA_DIR+'test.csv', submit=DATA_DIR+'
     good_features.remove(score_hist[-1][1])
     good_features = sorted(list(good_features))
     print "Selected features %s" % good_features
+    # [0, 7, 8, 10, 29, 36, 37, 42, 47, 53, 55, 64, 65, 66, 67, 69, 71, 79, 81, 82]
     
     print "Performing hyperparameter selection..."
     # Hyperparameter selection loop
@@ -140,6 +141,7 @@ def main(train=DATA_DIR+'train.csv', test=DATA_DIR+'test.csv', submit=DATA_DIR+'
         print "C: %f Mean AUC: %f" %(C, score)
     bestC = max(score_hist)[1]
     print "Best C value: %f" % (bestC)
+    # 2.208179
     
     print "Performing One Hot Encoding on entire dataset..."
     Xt = np.vstack((X_train_all[:,good_features], X_test_all[:,good_features]))
