@@ -102,7 +102,7 @@ def main(train=DATA_DIR+'train.csv', test=DATA_DIR+'test.csv', submit=DATA_DIR+'
     X_test_all = np.hstack((X_test, X_test_2, X_test_3))
     num_features = X_train_all.shape[1]
     
-    model = linear_model.LogisticRegression(dual=False)
+    model = linear_model.LogisticRegression()
     
     # Xts holds one hot encodings for each individual feature in memory
     # speeding up feature selection 
@@ -130,7 +130,7 @@ def main(train=DATA_DIR+'train.csv', test=DATA_DIR+'test.csv', submit=DATA_DIR+'
     good_features.remove(score_hist[-1][1])
     good_features = sorted(list(good_features))
     print "Selected features %s" % good_features
-    # [0, 7, 8, 10, 29, 36, 37, 42, 47, 53, 55, 64, 65, 66, 67, 69, 71, 79, 81, 82]
+    # good_features= [0, 7, 8, 10, 29, 36, 37, 42, 47, 53, 55, 64, 65, 66, 67, 69, 71, 79, 81, 82]
     
     print "Performing hyperparameter selection..."
     # Hyperparameter selection loop
@@ -145,7 +145,8 @@ def main(train=DATA_DIR+'train.csv', test=DATA_DIR+'test.csv', submit=DATA_DIR+'
     bestC = max(score_hist)[1]
     model.C = bestC
     print "Best C value: %f" % (bestC)
-    # approx. 2.2
+    
+    model.C = 2.5
     
     print "Performing One Hot Encoding on entire dataset..."
     Xt = np.vstack((X_train_all[:,good_features], X_test_all[:,good_features]))
