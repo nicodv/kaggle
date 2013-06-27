@@ -3,22 +3,22 @@
 import os
 import numpy as np
 
-from pylearn2.datasets.dense_design_matrix import DenseDesignMatrix, DefaultViewConverter
+from pylearn2.datasets.dense_design_matrix import DenseDesignMatrix
 from pylearn2.datasets import preprocessing
 import pylearn2.utils.serial as serial
 
-DATA_DIR = 'home/nico/datasets/Kaggle/Digits/'
+DATA_DIR = '/home/nico/datasets/Kaggle/Digits/'
 
 def initial_read():
     #create the training & test sets, skipping the header row with [1:]
-    dataset = genfromtxt(open(DATA_DIR+'train.csv','r'), delimiter=',', dtype='f8')[1:]    
+    dataset = np.genfromtxt(open(DATA_DIR+'train.csv','r'), delimiter=',', dtype='f8')[1:]
     targets = [x[0] for x in dataset]
     train = [x[1:] for x in dataset]
-    test = genfromtxt(open(DATA_DIR+'test.csv','r'), delimiter=',', dtype='f8')[1:]
+    test = np.genfromtxt(open(DATA_DIR+'test.csv','r'), delimiter=',', dtype='f8')[1:]
     
     # transform
-    train = np.reshape([-1,28,28], np.array(train))
-    test = np.reshape([-1,28,28], np.array(test))
+    train = np.reshape(np.array(train), (-1,28,28))
+    test = np.reshape(np.array(test), (-1,28,28))
     targets = np.array(targets)
     
     # pickle
@@ -33,8 +33,6 @@ class Digits(DenseDesignMatrix):
         
         X = np.load(os.path.join(DATA_DIR,which_set+'.npy'))
         X = np.cast['float32'](X)
-        # X needs to be 1D, shape info is stored in view_converter
-        X = np.reshape(X,(X.shape[0], np.prod(X.shape[1:])))
         
         if which_set == 'test':
             # dummy targets
@@ -43,8 +41,8 @@ class Digits(DenseDesignMatrix):
             y = np.load(os.path.join(DATA_DIR,'targets.npy'))
             one_hot = np.zeros((y.shape[0],10),dtype='float32')
             for i in xrange(y.shape[0]):
-                    one_hot[i,y[i]] = 1.
-                y = one_hot
+                one_hot[i,int(y[i])] = 1.
+            y = one_hot
         
         def dimshuffle(b01c):
             default = ('b', 0, 1, 'c')
@@ -54,7 +52,7 @@ class Digits(DenseDesignMatrix):
             assert start >= 0
             assert stop > start
             assert stop <= X.shape[0]
-            X = X[start:stop, :]
+            X = X[start:stop, :, :]
             y = y[start:stop]
             assert X.shape[0] == y.shape[0]
         
@@ -72,8 +70,8 @@ class Digits(DenseDesignMatrix):
             preprocessor.apply(self)
 
 def get_dataset(tot=False):
-    if not os.path.exists(DATA_DIR+'train.npy') or
-        not os.path.exists(DATA_DIR+'test.npy') or
+    if not os.path.exists(DATA_DIR+'train.npy') or \
+        not os.path.exists(DATA_DIR+'test.npy') or \
         not os.path.exists(DATA_DIR+'targets.npy'):
         initial_read()
     
@@ -93,8 +91,8 @@ def get_dataset(tot=False):
     else:
         
         print 'loading raw data...'
-        trainset = Digits(which_set='train', start=0, stop=50000)
-        validset = Digits(which_set='train', start=50000, stop=60000)
+        trainset = Digits(which_set='train', start=0, stop=34000)
+        validset = Digits(which_set='train', start=34000, stop=42000)
         tottrainset = Digits(which_set='train')
         testset = Digits(which_set='test')
         

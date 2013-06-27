@@ -27,9 +27,9 @@ def get_maxout(dim_input, batch_size=100):
                      pool_shape=[4, 4], pool_stride=[2, 2], irange=.005, max_kernel_norm=.9),
         MaxoutConvC01B(layer_name='h1', pad=3, num_channels=48, num_pieces=2, kernel_shape=[8, 8],
                      pool_shape=[4, 4], pool_stride=[2, 2], irange=.005, max_kernel_norm=1.9365),
-        MaxoutConvC01B(layer_name='h2', pad=0, num_channels=24, num_pieces=4, kernel_shape=[5, 5],
+        MaxoutConvC01B(layer_name='h2', pad=3, num_channels=24, num_pieces=4, kernel_shape=[5, 5],
                      pool_shape=[2, 2], pool_stride=[2, 2], irange=.005, max_kernel_norm=1.9365),
-        Softmax(layer_name='y', max_col_norm=1.9365, n_classes=10, i_range=0.005)
+        Softmax(layer_name='y', max_col_norm=1.9365, n_classes=10, irange=0.005)
         ]
     }
     return MLP(**config)
@@ -85,11 +85,11 @@ if __name__ == '__main__':
     submission = False
     batch_size = 100
     
-    trainset,validset,testset = Digits.digits_data.get_dataset('melspectrum', tot=submission)
+    trainset,validset,testset = Digits.digits_data.get_dataset(tot=submission)
     
     # build and train classifiers for submodels
     model = get_maxout([28,28,1], batch_size=batch_size)
-    get_trainer(model, trainset, validset, epochs=50, batch_size=batch_size).main_loop()
+    get_trainer(model, trainset, validset, epochs=5, batch_size=batch_size).main_loop()
     
     # validate model
     if not submission:
