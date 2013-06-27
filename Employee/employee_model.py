@@ -1,11 +1,14 @@
-from sklearn import metrics, cross_validation, linear_model, decomposition
+from sklearn import metrics, cross_validation, linear_model, decomposition, preprocessing, cluster
 from scipy import sparse
-from itertools import combinations
+import itertools
 
 import numpy as np
 import pandas as pd
 
 DATA_DIR = '/home/nico/datasets/Kaggle/Employee/'
+TRAIN_FILE = DATA_DIR+'train.csv'
+TEST_FILE = DATA_DIR+'test.csv'
+SUBM_FILE = DATA_DIR+'submission.csv'
 
 SEED = 42
 
@@ -17,46 +20,18 @@ def group_data(data, degree=3, hash=hash):
     '''
     new_data = []
     m,n = data.shape
-    for indices in combinations(range(n), degree):
+    for indices in itertools.combinations(range(n), degree):
         new_data.append([hash(tuple(v)) for v in data[:,indices]])
     return np.array(new_data).T
 
-def OneHotEncoder(data, keymap=None):
-     '''
-     OneHotEncoder takes data matrix with categorical columns and
-     converts it to a sparse binary matrix.
-     
-     Returns sparse binary matrix and keymap mapping categories to indices.
-     If a keymap is supplied on input it will be used instead of creating one
-     and any categories appearing in the data that are not in the keymap are
-     ignored
-     '''
-     if keymap is None:
-          keymap = []
-          for col in data.T:
-               uniques = set(list(col))
-               keymap.append(dict((key, i) for i, key in enumerate(uniques)))
-     total_pts = data.shape[0]
-     outdat = []
-     for i, col in enumerate(data.T):
-          km = keymap[i]
-          num_labels = len(km)
-          spmat = sparse.lil_matrix((total_pts, num_labels))
-          for j, val in enumerate(col):
-               if val in km:
-                    spmat[j, km[val]] = 1
-          outdat.append(spmat)
-     outdat = sparse.hstack(outdat).tocsr()
-     return outdat, keymap
-
-def create_test_submission(filename, prediction):
+def create_submission(prediction):
     content = ['id,ACTION']
     for i, p in enumerate(prediction):
         content.append('%i,%f' %(i+1,p))
-    f = open(filename, 'w')
+    f = open(SUBM_FILE, 'w')
     f.write('\n'.join(content))
     f.close()
-    print 'Saved'
+    print 'Saved submission'
 
 # This loop essentially from Paul Duan's starter code
 def cv_loop(X, y, model, N):
@@ -71,15 +46,17 @@ def cv_loop(X, y, model, N):
         print "AUC (fold %d/%d): %f" % (i + 1, N, auc)
         mean_auc += auc
     return mean_auc/N
+
+
+if __name__ == "__main__":
     
-def main(train=DATA_DIR+'train.csv', test=DATA_DIR+'test.csv', submit=DATA_DIR+'submission.csv'):    
     print "Reading dataset..."
-    train_data = pd.read_csv(train)
-    test_data = pd.read_csv(test)
+    train_data = pd.read_csv(TRAIN_FILE)
+    test_data = pd.read_csv(TEST_FILE)
     
     # note: last column is duplicate, dropped here
     all_data = np.vstack((train_data.ix[:,1:-1], test_data.ix[:,1:-1]))
-
+    
     num_train = np.shape(train_data)[0]
     
     # Transform data
@@ -87,8 +64,6 @@ def main(train=DATA_DIR+'train.csv', test=DATA_DIR+'test.csv', submit=DATA_DIR+'
     dp = group_data(all_data, degree=2) 
     dt = group_data(all_data, degree=3)
     
-    # RandomizedPCA? SparsePCA? LDA?
-
     y = np.array(train_data.ACTION)
     X = all_data[:num_train]
     X_2 = dp[:num_train]
@@ -106,7 +81,7 @@ def main(train=DATA_DIR+'train.csv', test=DATA_DIR+'test.csv', submit=DATA_DIR+'
     
     # Xts holds one hot encodings for each individual feature in memory
     # speeding up feature selection 
-    Xts = [OneHotEncoder(X_train_all[:,[i]])[0] for i in range(num_features)]
+    Xts = [preprocessing.OneHotEncoder(X_train_all[:,[i]])[0] for i in range(num_features)]
     
     print "Performing greedy feature selection..."
     score_hist = []
@@ -150,7 +125,7 @@ def main(train=DATA_DIR+'train.csv', test=DATA_DIR+'test.csv', submit=DATA_DIR+'
     
     print "Performing One Hot Encoding on entire dataset..."
     Xt = np.vstack((X_train_all[:,good_features], X_test_all[:,good_features]))
-    Xt, keymap = OneHotEncoder(Xt)
+    Xt, keymap = preprocessing.OneHotEncoder(Xt)
     X_train = Xt[:num_train]
     X_test = Xt[num_train:]
     
@@ -159,12 +134,5 @@ def main(train=DATA_DIR+'train.csv', test=DATA_DIR+'test.csv', submit=DATA_DIR+'
     
     print "Making prediction and saving results..."
     preds = model.predict_proba(X_test)[:,1]
-    create_test_submission(submit, preds)
-    
-
-if __name__ == "__main__":
-    args = { 'train':  DATA_DIR+'train.csv',
-             'test':   DATA_DIR+'test.csv',
-             'submit': DATA_DIR+'submission.csv' }
-    main(**args)
+    create_submission(preds)
     
