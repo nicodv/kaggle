@@ -1,9 +1,9 @@
-from sklearn import metrics, cross_validation, linear_model, decomposition, preprocessing, cluster
-from scipy import sparse
-import itertools
-
 import numpy as np
 import pandas as pd
+from multiprocessing import Pool
+import itertools
+
+from sklearn import metrics, cross_validation, linear_model, decomposition, preprocessing, cluster
 
 DATA_DIR = '/home/nico/datasets/Kaggle/Employee/'
 TRAIN_FILE = DATA_DIR+'train.csv'
@@ -12,17 +12,44 @@ SUBM_FILE = DATA_DIR+'submission.csv'
 
 SEED = 42
 
-def group_data(data, degree=3, hash=hash):
-    ''' 
-    numpy.array -> numpy.array
-    
-    Groups all columns of data into all combinations of triples
+def construct_combined_features(data, degree=2):
+    '''Combine features into a set of new features that express the
+    double/triple/etc. combinations of original features.
     '''
+    
     new_data = []
-    m,n = data.shape
-    for indices in itertools.combinations(range(n), degree):
-        new_data.append([hash(tuple(v)) for v in data[:,indices]])
-    return np.array(new_data).T
+    _, nfeat = data.shape
+    for indices in itertools.combinations(range(n_feat), degree):
+        new_data.append(data[:,indices])
+    
+    return preprocessing.LabelEncoder().fit_transform(new_data)
+
+def greedy_feature_selection(all_features, training_data):
+    pool = Pool(processes=4)
+
+    best_features = []
+    last_score = 0
+
+    while True:
+        test_feature_sets = [[f] + best_features
+                             for f in all_features 
+                             if f not in best_features]
+
+        args = [(feature_set, training_data.ACTION)
+                for feature_set in test_feature_sets]
+
+        scores = pool.map(features_score, args)
+
+        (score, feature_set) = max(zip(scores, test_feature_sets))
+        print feature_set
+        print score
+        if score <= last_score:
+            break
+        last_score = score
+        best_features = feature_set
+
+    pool.close()
+    return best_features
 
 def create_submission(prediction):
     content = ['id,ACTION']
@@ -54,15 +81,15 @@ if __name__ == "__main__":
     train_data = pd.read_csv(TRAIN_FILE)
     test_data = pd.read_csv(TEST_FILE)
     
-    # note: last column is duplicate, dropped here
+    # note: last column is duplicate, so dropped here
     all_data = np.vstack((train_data.ix[:,1:-1], test_data.ix[:,1:-1]))
     
     num_train = np.shape(train_data)[0]
     
     # Transform data
     print "Transforming data..."
-    dp = group_data(all_data, degree=2) 
-    dt = group_data(all_data, degree=3)
+    dp = construct_combined_features(all_data, degree=2) 
+    dt = construct_combined_features(all_data, degree=3)
     
     y = np.array(train_data.ACTION)
     X = all_data[:num_train]
