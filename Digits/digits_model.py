@@ -13,7 +13,7 @@ from pylearn2.costs.mlp.dropout import Dropout
 from pylearn2.space import Conv2DSpace
 from pylearn2.training_algorithms.sgd import SGD, ExponentialDecay, MomentumAdjustor
 from pylearn2.termination_criteria import EpochCounter
-from sklearn.metrics.metrics import auc_score
+from sklearn.metrics.metrics import accuracy_score
 
 DATA_DIR = '/home/nico/datasets/Kaggle/Digits/'
 
@@ -56,9 +56,9 @@ def get_output(model, tdata, layerindex, batch_size=100):
     Xb = model.get_input_space().make_theano_batch()
     Yb = model.fprop(Xb, return_all=True)
     
-    data = tdata.get_topological_view()
+    data = tdata.get_topological_view() #.transpose((3,1,2,0))
     # fill up with zeroes for dividible by batch number
-    extralength = batch_size - data.shape[0]%batch_size
+    extralength = batch_size - data.shape[3]%batch_size
     
     if extralength < batch_size:
         data = np.append(data,np.zeros([extralength, data.shape[1],data.shape[2],data.shape[3]]), axis=0)
@@ -67,11 +67,11 @@ def get_output(model, tdata, layerindex, batch_size=100):
     propagate = function([Xb], Yb, allow_input_downcast=True)
     
     output = []
-    for ii in xrange(int(data.shape[0]/batch_size)):
-        seldata = data[ii*batch_size:(ii+1)*batch_size,:]
+    for ii in xrange(int(data.shape[3]/batch_size)):
+        seldata = data[:,:,:,ii*batch_size:(ii+1)*batch_size]
         output.append(propagate(seldata)[layerindex])
     
-    output = np.reshape(output,[data.shape[0],-1])
+    output = np.reshape(output,[data.shape[3],-1])
     
     if extralength < batch_size:
         # remove the filler
@@ -82,25 +82,25 @@ def get_output(model, tdata, layerindex, batch_size=100):
 
 if __name__ == '__main__':
     
-    submission = False
+    submission = True
     batch_size = 100
     
     trainset,validset,testset = Digits.digits_data.get_dataset(tot=submission)
     
     # build and train classifiers for submodels
     model = get_maxout([28,28,1], batch_size=batch_size)
-    get_trainer(model, trainset, validset, epochs=5, batch_size=batch_size).main_loop()
+    get_trainer(model, trainset, validset, epochs=200, batch_size=batch_size).main_loop()
     
     # validate model
     if not submission:
-        output = get_output(model, validset, -1)
+        output = get_output(model,validset,-1)
         # calculate AUC using sklearn
-        AUC = auc_score(validset.get_targets()[:,0],output[:,0])
-        print AUC
+        accuracy = accuracy_score(np.argmax(validset.get_targets(),axis=1),np.argmax(output,axis=1))
+        print accuracy
     else:
-        fn = np.load(os.path.join(DATA_DIR,'filenames.npy'))
-        outtestset = get_output(model,testset,-1)[:,0]
+        outtestset = get_output(model,testset,-1)
         
         # save test output as submission
-        output = pd.DataFrame({'clip': fn, 'probability': outtestset})
-        output.to_csv(DATA_DIR+'model_maxout.csv', header=True, index=False)
+        np.savetxt(DATA_DIR+'submission.csv', np.argmax(outtestset,axis=1))
+        
+    
