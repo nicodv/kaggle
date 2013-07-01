@@ -7,6 +7,8 @@ from pylearn2.datasets.dense_design_matrix import DenseDesignMatrix
 from pylearn2.datasets import preprocessing
 import pylearn2.utils.serial as serial
 
+from PIL import Image
+
 DATA_DIR = '/home/nico/datasets/Kaggle/Digits/'
 
 def initial_read():
@@ -65,20 +67,17 @@ class Digits(DenseDesignMatrix):
         super(Digits,self).__init__(topo_view = dimshuffle(topo_view), y=y, axes=axes)
         
         assert not np.any(np.isnan(self.X))
-        
-        if preprocessor:
-            preprocessor.apply(self)
 
-def get_dataset(tot=False):
+def get_dataset(tot=False, preprocessor='normal'):
     if not os.path.exists(DATA_DIR+'train.npy') or \
         not os.path.exists(DATA_DIR+'test.npy') or \
         not os.path.exists(DATA_DIR+'targets.npy'):
         initial_read()
     
-    train_path = DATA_DIR+'train_preprocessed.pkl'
-    valid_path = DATA_DIR+'valid_preprocessed.pkl'
-    tottrain_path = DATA_DIR+'tottrain_preprocessed.pkl'
-    test_path = DATA_DIR+'test_preprocessed.pkl'
+    train_path = DATA_DIR+'train_'+preprocessor+'_preprocessed.pkl'
+    valid_path = DATA_DIR+'valid_'+preprocessor+'_preprocessed.pkl'
+    tottrain_path = DATA_DIR+'tottrain_'+preprocessor+'_preprocessed.pkl'
+    test_path = DATA_DIR+'test_'+preprocessor+'_preprocessed.pkl'
     
     if os.path.exists(train_path) and os.path.exists(valid_path) and os.path.exists(test_path):
         
@@ -98,25 +97,27 @@ def get_dataset(tot=False):
         
         print 'preprocessing data...'
         pipeline = preprocessing.Pipeline()
-        
-        #pipeline.items.append(preprocessing.ExtractGridPatches(patch_shape=(16,16),patch_stride=(8,8)))
         pipeline.items.append(preprocessing.GlobalContrastNormalization(sqrt_bias=10., use_std=True))
-        # ZCA = zero-phase component analysis
-        # very similar to PCA, but preserves the look of the original image better
-        pipeline.items.append(preprocessing.ZCA())
         
+        if preprocessor != 'nozca':
+            # ZCA = zero-phase component analysis
+            # very similar to PCA, but preserves the look of the original image better
+            pipeline.items.append(preprocessing.ZCA())
+        
+        # note the can_fit=False's: no sharing between train and valid data
         trainset.apply_preprocessor(preprocessor=pipeline, can_fit=True)
-        # this uses numpy format for storage instead of pickle, for memory reasons
-        trainset.use_design_loc(DATA_DIR+'train_design.npy')
-        # note the can_fit=False: no sharing between train and valid data
         validset.apply_preprocessor(preprocessor=pipeline, can_fit=False)
-        validset.use_design_loc(DATA_DIR+'valid_design.npy')
         tottrainset.apply_preprocessor(preprocessor=pipeline, can_fit=True)
-        tottrainset.use_design_loc(DATA_DIR+'tottrain_design.npy')
-        # note the can_fit=False: no sharing between train and test data
         testset.apply_preprocessor(preprocessor=pipeline, can_fit=False)
-        testset.use_design_loc(DATA_DIR+'test_design.npy')
         
+        if preprocessor == 'rotated':
+            pass
+        
+        # this uses numpy format for storage instead of pickle, for memory reasons
+        trainset.use_design_loc(DATA_DIR+'train_'+preprocessor+'_design.npy')
+        validset.use_design_loc(DATA_DIR+'valid_'+preprocessor+'_design.npy')
+        tottrainset.use_design_loc(DATA_DIR+'tottrain_'+preprocessor+'_design.npy')
+        testset.use_design_loc(DATA_DIR+'test_'+preprocessor+'_design.npy')
         # this path can be used for visualizing weights after training is done
         trainset.yaml_src = '!pkl: "%s"' % train_path
         validset.yaml_src = '!pkl: "%s"' % valid_path
@@ -124,10 +125,10 @@ def get_dataset(tot=False):
         testset.yaml_src = '!pkl: "%s"' % test_path
         
         print 'saving preprocessed data...'
-        serial.save(DATA_DIR+'train_preprocessed.pkl', trainset)
-        serial.save(DATA_DIR+'valid_preprocessed.pkl', validset)
-        serial.save(DATA_DIR+'tottrain_preprocessed.pkl', tottrainset)
-        serial.save(DATA_DIR+'test_preprocessed.pkl', testset)
+        serial.save(train_path, trainset)
+        serial.save(valid_path, validset)
+        serial.save(tottrain_path, tottrainset)
+        serial.save(test_path, testset)
         
     if tot:
         return tottrainset, validset, testset
