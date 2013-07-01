@@ -1,61 +1,44 @@
 import numpy as np
 import pandas as pd
 import re
-from sklearn import cross_validation, ensemble, pipeline, \
-            grid_search, metrics, svm, preprocessing, neighbors, decomposition
+import itertools
+from sklearn import feature_extraction, preprocessing, pipeline, grid_search, cross_validation, ensemble, metrics
 
 DATA_DIR = '/home/nico/datasets/Kaggle/Titanic/'
 
-def families(train, test):
-    trainr = train[['name','parch','sibsp','survived']]
-    trainr['ind'] = trainr.index
-    testr = test[['name','parch','sibsp']]
-    testr['ind'] = testr.index + 10000
-    tot = pd.concat([trainr, testr]).reset_index()
-    tot['fvar'] = tot.parch + tot.sibsp
-    tot = tot.drop(['parch','sibsp'], axis=1)
-    # find family name (at start, everything before comma)
-    fnre = re.compile('^(.+?),')
-    tot['famname'] = tot.name.map(lambda x: fnre.search(x).group()[:-1])
-    # survival chance = mean of rest of family
-    survived = tot.groupby(['famname','fvar']).survived
-    f = lambda x: x.fillna(x.mean())
-    tot['famscore'] = survived.transform(f)
-    # wait, loners shouldn't look at other loners
-    tot.famscore[tot.fvar==0] = np.nan
-    tot.famscore = tot.famscore.fillna(0.5)
-    
-    train['famscore'] = pd.merge(trainr,tot[['ind','famscore']], how='left', on='ind')['famscore']
-    test['famscore'] = pd.merge(testr,tot[['ind','famscore']], how='left', on='ind')['famscore']
-    return train, test
+def one_hot_dataframe(data, cols, replace=False):
+	'''Takes a dataframe and a list of columns that need to be encoded.
+	Returns a 3-tuple comprising the data, the vectorized data,
+	and the fitted vectorizor.
+	'''
+	vec = feature_extraction.DictVectorizer()
+	mkdict = lambda row: dict((col, row[col]) for col in cols)
+	vecData = pd.DataFrame(vec.fit_transform(data[cols].apply(mkdict, axis=1)).toarray())
+	vecData.columns = vec.get_feature_names()
+	vecData.index = data.index
+	if replace is True:
+		data = data.drop(cols, axis=1)
+		data = data.join(vecData)
+	return (data, vecData, vec)
+
+def construct_combined_features(data, degree=2):
+    new_data = []
+    _, nfeat = data.shape
+    for indices in itertools.combinations(range(n_feat), degree):
+        new_data.append(data[:,indices])
+    return preprocessing.LabelEncoder().fit_transform(new_data)
 
 def prepare_data(d):
     
     # delete unused columns
     d = d.drop(['ticket'],axis=1)
     
-    d.sex[d.sex=='female'] = -1
-    d.sex[d.sex=='male'] = 1
+    # set missing embarks to 'S', by far the most common value. couldn't find any other clues
+    d.embarked[d.embarked.isnull()] = 'S'
     
-    d['embarked1'] = 0
-    d['embarked2'] = 0
-    d['embarked3'] = 0
-    d.embarked1[d.embarked=='C'] = 1
-    d.embarked2[d.embarked=='S'] = 1
-    d.embarked3[d.embarked=='Q'] = 1
-    # set missings to 'S', by far the most common value. couldn't find any other clues
-    d.embarked2[d.embarked.isnull()] = 1
-    
-    # categories based on title in name
-    re1 = re.compile("Mr.|Dr.|Col.|Major.|Rev.")
-    re2 = re.compile("Mrs.|Mlle.|Don.|Countess.|Jonkheer.")
-    re3 = re.compile("Miss.")
-    re4 = re.compile("Master.")
-    d['title1'] = d.name.map(lambda x: int(bool(re1.search(x))))
-    d['title2'] = d.name.map(lambda x: int(bool(re2.search(x))))
-    d['title3'] = d.name.map(lambda x: int(bool(re3.search(x))))
-    d['title4'] = d.name.map(lambda x: int(bool(re4.search(x))))
-    
+	# one-hot encoding for categorical features
+	d, _, _ = one_hot_dataframe(d, ['sex','embarked'], replace=True)
+	
     d.cabin[~d.cabin.isnull()] = d.cabin[~d.cabin.isnull()].map(lambda x: x[0])
     # E and D appear to be safe areas
     d.cabin[d.cabin=='E'] = 1
@@ -93,31 +76,19 @@ def prepare_data(d):
     
     # median price per class (above threshold for lucky cheapos)
     fares = d.groupby(['pclass','embarked']).fare
-    d = d.drop(['embarked'],axis=1)
     f = lambda x: x.fillna(x.median())
     d.fare = fares.transform(f)
-    
     # now rank the fares
     d['farerank'] = d.fare.rank() / len(d.fare)
     
     # create some new combined features
     d['pvar'] = d.parch+1 * d.sibsp+1
     
+    combo = ['sex','pclass','parch','sibsp','cabin','embarked']
+    comb2feats = construct_combined_features(d[combo].as_array(), degree=2)
+    d = pd.concat(d, comb2feats)
+    
     return d
-
-traindata = pd.read_csv(DATA_DIR+'train.csv')
-testdata = pd.read_csv(DATA_DIR+'test.csv')
-
-traindata, testdata = families(traindata, testdata)
-
-traindata = prepare_data(traindata)
-testdata = prepare_data(testdata)
-
-# SELECT INPUT VARIABLES HERE
-colnames = ['pclass','farerank','age','pvar','famscore','survived']
-
-traindata = traindata[colnames]
-testdata = testdata[colnames[:-1]]
 
 def train_model(traindata, targets):
     
@@ -135,7 +106,7 @@ def train_model(traindata, targets):
     ]
     
     # use StratifiedKFold, because survived 0/1 is not evenly distributed
-    cv = cross_validation.StratifiedKFold(targets, n_folds=5)
+    cv = cross_validation.StratifiedKFold(targets, n_folds=8)
     
     scores = [0]*len(models)
     for i in range(len(models)):
@@ -149,27 +120,31 @@ def train_model(traindata, targets):
         
     return models
 
-# preprocessing
-def preproc(d):
-    meand = d.mean()
-    stdd = d.std()
-    d = d.map(lambda x: (x - meand) / stdd)
-
-    return d, meand, stdd
-
-for i in colnames:
-    if i in ('pvar','age','farerank','famscore'):
-        traindata[i], meand, stdd = preproc(traindata[i])
-        testdata[i] = testdata[i].map(lambda x: (x - meand) / stdd)
-
-models = train_model(traindata[colnames[:-1]], targets)
-
-# make prediction
-prediction = [[0]*418 for i in range(len(models))]
-for i in range(len(models)):
-    prediction[i] = models[i].predict(testdata[colnames[:-1]]).tolist()
-
-pred = pd.DataFrame(prediction).median().astype(int)
-
-# save to CSV
-pred.to_csv(DATA_DIR+'submission.csv', sep=',', header=False, index=False)
+if __name__ == '__main__':
+	traindata = pd.read_csv(DATA_DIR+'train.csv')
+	testdata = pd.read_csv(DATA_DIR+'test.csv')
+	targets = traindata['survived']
+	
+	num_train = len(traindata)
+	
+	totdata = pd.concat(traindata, testdata)
+	totdata = prepare_data(totdata)
+	
+	# SELECT INPUT VARIABLES HERE
+	colnames = ['pclass','farerank','age','pvar']
+	
+	traindata = totdata[colnames].ix[:,:num_train]
+	testdata = totdata[colnames].ix[:,num_train:]
+	
+	models = train_model(traindata, targets)
+	
+	# make prediction
+	prediction = [[0]*418 for i in range(len(models))]
+	for i in range(len(models)):
+	    prediction[i] = models[i].predict(testdata[colnames[:-1]]).tolist()
+	
+	pred = pd.DataFrame(prediction).median().astype(int)
+	
+	# save to CSV
+	pred.to_csv(DATA_DIR+'submission.csv', sep=',', header=False, index=False)
+	
