@@ -91,7 +91,6 @@ def get_comb_models(traindata, targets, crossval=True):
     if crossval:
         # use StratifiedKFold, because survived 0/1 is not evenly distributed
         cv = cross_validation.StratifiedKFold(targets, n_folds=5)
-    
         scores = [0]*len(models)
     
     for i in range(len(models)):
@@ -101,8 +100,8 @@ def get_comb_models(traindata, targets, crossval=True):
                         cv=cv, n_jobs=-1, scoring='accuracy')
             print "Cross-validation accuracy on the training set for model %d:" % i
             print "%0.3f (+/-%0.03f)" % (scores[i].mean(), scores[i].std() / 2)
-        
-        models[i].fit(traindata, targets)
+        else:
+            models[i].fit(traindata, targets)
     
     return models
 
