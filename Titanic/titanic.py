@@ -55,14 +55,14 @@ def prepare_data(d):
     d.cabin = cabins.transform(f)
     
     # categories based on title in name
-    re1 = re.compile("Mr.|Dr.|Col.|Major.|Rev.")
-    re2 = re.compile("Mrs.|Mlle.|Don.|Countess.|Jonkheer.")
-    re3 = re.compile("Miss.")
-    re4 = re.compile("Master.")
-    d['title1'] = d.name.map(lambda x: int(bool(re1.search(x))))
-    d['title2'] = d.name.map(lambda x: int(bool(re2.search(x))))
-    d['title3'] = d.name.map(lambda x: int(bool(re3.search(x))))
-    d['title4'] = d.name.map(lambda x: int(bool(re4.search(x))))
+#    re1 = re.compile("Mr.|Dr.|Col.|Major.|Rev.")
+#    re2 = re.compile("Mrs.|Mlle.|Don.|Countess.|Jonkheer.")
+#    re3 = re.compile("Miss.")
+#    re4 = re.compile("Master.")
+#    d['title1'] = d.name.map(lambda x: int(bool(re1.search(x))))
+#    d['title2'] = d.name.map(lambda x: int(bool(re2.search(x))))
+#    d['title3'] = d.name.map(lambda x: int(bool(re3.search(x))))
+#    d['title4'] = d.name.map(lambda x: int(bool(re4.search(x))))
     
     # convert nominal data to integers
     # simple encoding of first 3 characters of name
@@ -70,7 +70,7 @@ def prepare_data(d):
     d.name = d.name.map(lambda x: x.replace("'",'z'))
     d.name = d.name.map(lambda x: string.lowercase.index(x[0].lower())*900 + \
     string.lowercase.index(x[1].lower())*30 + string.lowercase.index(x[1].lower()))
-
+    
     # traveling in what sort of group? used for age
     d['member'] = np.nan
     # traveling alone
@@ -112,22 +112,21 @@ def prepare_data(d):
     d, _, _ = one_hot_dataframe(d, L[:15], replace=True)
     d, _, _ = one_hot_dataframe(d, LL[:20], replace=True)
     
-    d = d.drop(['name'],axis=1)
     return d
 
 def train_model(traindata, targets):
     
     models = [ \
-    ensemble.GradientBoostingClassifier(n_estimators=250, learning_rate=0.1, \
-    max_depth=4, subsample=0.3, max_features=8, min_samples_leaf=10), \
-    ensemble.GradientBoostingClassifier(n_estimators=400, learning_rate=0.08, \
-    max_depth=5, subsample=0.4, max_features=8, min_samples_leaf=10), \
-    ensemble.GradientBoostingClassifier(n_estimators=500, learning_rate=0.06, \
-    max_depth=6, subsample=0.5, max_features=6, min_samples_leaf=15), \
-    ensemble.GradientBoostingClassifier(n_estimators=600, learning_rate=0.04, \
-    max_depth=7, subsample=0.6, max_features=4, min_samples_leaf=20), \
-    ensemble.GradientBoostingClassifier(n_estimators=750, learning_rate=0.02, \
-    max_depth=8, subsample=0.7, max_features=4, min_samples_leaf=20) \
+#    ensemble.GradientBoostingClassifier(n_estimators=250, learning_rate=0.1, \
+#    max_depth=4, subsample=0.3, max_features=8, min_samples_leaf=10), \
+#    ensemble.GradientBoostingClassifier(n_estimators=500, learning_rate=0.06, \
+#    max_depth=6, subsample=0.5, max_features=6, min_samples_leaf=15), \
+    ensemble.RandomForestClassifier(n_estimators=100, \
+    max_depth=8, max_features='auto', min_samples_leaf=30), \
+    ensemble.RandomForestClassifier(n_estimators=300, \
+    max_depth=7, max_features='auto', min_samples_leaf=25), \
+    ensemble.RandomForestClassifier(n_estimators=500, \
+    max_depth=6, max_features='auto', min_samples_leaf=20) \
     ]
     
     # use StratifiedKFold, because survived 0/1 is not evenly distributed
