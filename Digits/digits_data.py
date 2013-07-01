@@ -110,8 +110,33 @@ def get_dataset(tot=False, preprocessor='normal'):
         tottrainset.apply_preprocessor(preprocessor=pipeline, can_fit=True)
         testset.apply_preprocessor(preprocessor=pipeline, can_fit=False)
         
-        if preprocessor == 'rotated':
-            pass
+        if preprocessor not in ('normal','nozca'):
+            for data in (trainset, validset, tottrainset, testset):
+                for ii in range(data.X.shape[3]):
+                    # convert to PIL image
+                    img = Image.fromarray(data.X[1,:,:,ii].reshape(28, 28) * 255.).convert('L')
+                    
+                    # apply preprocessor
+                    if preprocessor == 'rotate':
+                        rot = rng.randint(-40, 40)
+                        img = img.rotate(rot, Image.BILINEAR)
+                    elif preprocessor == 'emboss':
+                        img = emboss(img)
+                    elif preprocessor == 'hshear':
+                        coef = np.random.rand()
+                        img = img.transform((28,28), Image.AFFINE, (1,-0.5+coef,0,0,1,0), Image.BILINEAR)
+                    elif preprocessor == 'vshear':
+                        coef = np.random.rand()
+                        img = img.transform((28,28), Image.AFFINE, (1,0,0,-0.5+coef,1,0), Image.BILINEAR)
+                    elif preprocessor == 'patch':
+                        x1 = np.random.randint(-4, 4)
+                        y1 = np.random.randint(-4, 4)
+                        x2 = np.random.randint(-4, 4)
+                        y2 = np.random.randint(-4, 4)
+                        img = img.transform((28,28), Image.EXTENT, (x1, y1, 28+x2, 28+y2), Image.BILINEAR)
+                    
+                    # convert back to numpy array
+                    data.X[1,:,:,ii] = np.array(img.getdata()) / 255.
         
         # this uses numpy format for storage instead of pickle, for memory reasons
         trainset.use_design_loc(DATA_DIR+'train_'+preprocessor+'_design.npy')
@@ -134,6 +159,42 @@ def get_dataset(tot=False, preprocessor='normal'):
         return tottrainset, validset, testset
     else:
         return trainset, validset, testset
+
+def emboss(img):
     
+    azi = rng.randint(0, 360)
+    ele = rng.randint(0, 60)
+    dep = 2
+    
+    # defining azimuth, elevation, and depth
+    ele = (ele * 2 * numpy.pi) / 360.
+    azi = (azi * 2 * numpy.pi) / 360.
+
+    a = np.asarray(img).astype('float')
+    # find the gradient
+    grad = np.gradient(a)
+    # (it is two arrays: grad_x and grad_y)
+    grad_x, grad_y = grad
+    # getting the unit incident ray
+    gd = np.cos(ele) # length of projection of ray on ground plane
+    dx = gd * np.cos(azi)
+    dy = gd * np.sin(azi)
+    dz = np.sin(ele)
+    # adjusting the gradient by the "depth" factor
+    # (I think this is how GIMP defines it)
+    grad_x = grad_x * dep / 100.
+    grad_y = grad_y * dep / 100.
+    # finding the unit normal vectors for the image
+    leng = np.sqrt(grad_x**2 + grad_y**2 + 1.)
+    uni_x = grad_x/leng
+    uni_y = grad_y/leng
+    uni_z = 1./leng
+    # take the dot product
+    a2 = 255 * (dx*uni_x + dy*uni_y + dz*uni_z)
+    # avoid overflow
+    a2 = a2.clip(0, 255)
+    # you must convert back to uint8 /before/ converting to an image
+    return Image.fromarray(a2.astype('uint8'))
+
 if __name__ == '__main__':
     pass
