@@ -107,7 +107,7 @@ if __name__ == '__main__':
     submission = True
     batch_size = 100
     
-    preprocessors = ('normal', 'zca', 'rotated')
+    preprocessors = ('normal', 'nozca')
     
     accuracies = []
     outtrainset = []
