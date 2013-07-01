@@ -2,7 +2,8 @@ import numpy as np
 import pandas as pd
 import re
 import itertools
-from sklearn import feature_extraction, preprocessing, pipeline, grid_search, cross_validation, ensemble, metrics
+from sklearn import feature_extraction, feature_selection, preprocessing, pipeline, \
+					grid_search, cross_validation, ensemble, metrics
 
 DATA_DIR = '/home/nico/datasets/Kaggle/Titanic/'
 
@@ -37,7 +38,7 @@ def prepare_data(d):
     d.embarked[d.embarked.isnull()] = 'S'
     
 	# one-hot encoding for categorical features
-	d, _, _ = one_hot_dataframe(d, ['sex','embarked'], replace=True)
+	d,_,_ = one_hot_dataframe(d, ['sex','embarked'], replace=True)
 	
     d.cabin[~d.cabin.isnull()] = d.cabin[~d.cabin.isnull()].map(lambda x: x[0])
     # E and D appear to be safe areas
@@ -130,11 +131,11 @@ if __name__ == '__main__':
 	totdata = pd.concat(traindata, testdata)
 	totdata = prepare_data(totdata)
 	
-	# SELECT INPUT VARIABLES HERE
-	colnames = ['pclass','farerank','age','pvar']
-	
-	traindata = totdata[colnames].ix[:,:num_train]
-	testdata = totdata[colnames].ix[:,num_train:]
+	# feature selection
+	selector = feature_selection.SelectKBest(f_classif, k=25)
+	traindata = totdata.ix[:,:num_train]
+	selector.fit_transform(traindata, targets)
+	testdata = selector.transform(totdata.ix[:,num_train:])
 	
 	models = train_model(traindata, targets)
 	
