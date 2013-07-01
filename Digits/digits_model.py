@@ -79,28 +79,69 @@ def get_output(model, tdata, layerindex, batch_size=100):
     
     return output
 
+def get_comb_models(traindata, targets, crossval=True):
+    
+    models = [ensemble.GradientBoostingClassifier(n_estimators=400, learning_rate=0.05, \
+                max_depth=60, subsample=0.5, max_features=120, min_samples_leaf=20)]
+    
+    if crossval:
+        # use StratifiedKFold, because survived 0/1 is not evenly distributed
+        cv = cross_validation.StratifiedKFold(targets, n_folds=5)
+    
+        scores = [0]*len(models)
+    
+    for i in range(len(models)):
+        if crossval:
+            # get scores
+            scores[i] = cross_validation.cross_val_score(models[i], traindata, targets, \
+                        cv=cv, n_jobs=-1, scoring='accuracy')
+            print "Cross-validation accuracy on the training set for model %d:" % i
+            print "%0.3f (+/-%0.03f)" % (scores[i].mean(), scores[i].std() / 2)
+        
+        models[i].fit(traindata, targets)
+    
+    return models
 
 if __name__ == '__main__':
     
     submission = True
     batch_size = 100
     
-    trainset,validset,testset = Digits.digits_data.get_dataset(tot=submission)
+    preprocessors = ('normal', 'zca', 'rotated')
     
-    # build and train classifiers for submodels
-    model = get_maxout([28,28,1], batch_size=batch_size)
-    get_trainer(model, trainset, validset, epochs=200, batch_size=batch_size).main_loop()
+    accuracies = []
+    outtrainset = []
+    outvalidset = []
+    outtestset = []
+    for ii, preprocessor in enumerate(preprocessors):
+        trainset,validset,testset = Digits.digits_data.get_dataset(tot=submission, preprocessor=preprocessor)
+        
+        # build and train classifiers for submodels
+        model = get_maxout([28,28,1], batch_size=batch_size)
+        get_trainer(model, trainset, validset, epochs=200, batch_size=batch_size).main_loop()
+        
+        # validate model
+        outtrainset[ii] = get_output(model,trainset,-1)
+        
+        if not submission:
+            # validset is udes to evaluate maxout network performance
+            outvalidset[ii] = get_output(model,validset,-1)
+            accuracies[ii] = accuracy_score(np.argmax(validset.get_targets(),axis=1),np.argmax(outvalidset[ii],axis=1))
+        else:
+            outtestset[ii] = get_output(model,testset,-1)
     
-    # validate model
     if not submission:
-        output = get_output(model,validset,-1)
-        # calculate AUC using sklearn
-        accuracy = accuracy_score(np.argmax(validset.get_targets(),axis=1),np.argmax(output,axis=1))
-        print accuracy
-    else:
-        outtestset = get_output(model,testset,-1)
-        
-        # save test output as submission
-        np.savetxt(DATA_DIR+'submission.csv', np.argmax(outtestset,axis=1))
-        
+        print(accuracies)
     
+    # now combine maxout predictions in a bunch of classifiers
+    comboutputs = []
+    if not submission:
+        # outtrainset is used to evaluate comb models
+        models = get_comb_models(outtrainset, trainset.y, crossval=True)
+    else:
+        models = get_comb_models(outtrainset, trainset.y, crossval=False)
+        for ii in range(len(models)):
+            comboutputs[ii] = models[ii].predict_proba(outtestset)
+        
+        # take mean of classifiers and save output as submission
+        np.savetxt(DATA_DIR+'submission.csv', np.argmax(np.mean(comboutputs, axis=0),axis=1))
