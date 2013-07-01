@@ -81,7 +81,11 @@ def get_output(model, tdata, layerindex, batch_size=100):
 
 def get_comb_models(traindata, targets, crossval=True):
     
-    models = [ensemble.GradientBoostingClassifier(n_estimators=400, learning_rate=0.05, \
+    models = [ensemble.GradientBoostingClassifier(n_estimators=100, learning_rate=0.05, \
+                max_depth=20, subsample=0.5, max_features=120, min_samples_leaf=20),
+            ensemble.GradientBoostingClassifier(n_estimators=200, learning_rate=0.05, \
+                max_depth=40, subsample=0.5, max_features=120, min_samples_leaf=20),
+            ensemble.GradientBoostingClassifier(n_estimators=400, learning_rate=0.05, \
                 max_depth=60, subsample=0.5, max_features=120, min_samples_leaf=20)]
     
     if crossval:
@@ -107,7 +111,7 @@ if __name__ == '__main__':
     submission = True
     batch_size = 100
     
-    preprocessors = ('normal', 'nozca')
+    preprocessors = ('normal', 'nozca', 'rotate', 'hshear', 'vshear', 'patch')
     
     accuracies = []
     outtrainset = []
