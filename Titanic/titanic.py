@@ -180,10 +180,10 @@ if __name__ == '__main__':
 	del testdataM['sex']
 	
     # feature selection
-    selectorF = feature_selection.SelectKBest(feature_selection.f_classif, k=80)
+    selectorF = feature_selection.SelectKBest(feature_selection.f_classif, k=50)
     traindataF = selector.fit_transform(traindataF, targetsF)
     testdataF = selector.transform(testdataF)
-    selectorM = feature_selection.SelectKBest(feature_selection.f_classif, k=80)
+    selectorM = feature_selection.SelectKBest(feature_selection.f_classif, k=50)
     traindataM = selector.fit_transform(traindataM, targetsM)
     testdataM = selector.transform(testdataM)
     
