@@ -31,7 +31,7 @@ def construct_combined_features(data, degree=2):
     return np.array(new_data).T
 
 def prepare_data(d):
-    
+
     # delete unused columns
     d = d.drop(['ticket'],axis=1)
     
@@ -53,16 +53,6 @@ def prepare_data(d):
     # fill with median of these groups
     f = lambda x: x.fillna(round(x.median()))
     d.cabin = cabins.transform(f)
-    
-    # categories based on title in name
-#    re1 = re.compile("Mr.|Dr.|Col.|Major.|Rev.")
-#    re2 = re.compile("Mrs.|Mlle.|Don.|Countess.|Jonkheer.")
-#    re3 = re.compile("Miss.")
-#    re4 = re.compile("Master.")
-#    d['title1'] = d.name.map(lambda x: int(bool(re1.search(x))))
-#    d['title2'] = d.name.map(lambda x: int(bool(re2.search(x))))
-#    d['title3'] = d.name.map(lambda x: int(bool(re3.search(x))))
-#    d['title4'] = d.name.map(lambda x: int(bool(re4.search(x))))
     
     # convert nominal data to integers
     # simple encoding of first 3 characters of name
@@ -139,53 +129,53 @@ def train_model(traindata, targets):
                     cv=cv, n_jobs=-1, score_func=metrics.accuracy_score)
         print("Cross-validation accuracy on the training set for model %d:" % i)
         print("%0.3f (+/-%0.03f)" % (scores[i].mean(), scores[i].std() / 2))
-        
+
         models[i].fit(traindata, targets)
-        
+
     return models
 
 if __name__ == '__main__':
     traindata = pd.read_csv(DATA_DIR+'train.csv')
     testdata = pd.read_csv(DATA_DIR+'test.csv')
     targets = traindata['survived']
-    traindata = traindata.drop(['survived'],axis=1)
+    #traindata = traindata.drop(['survived'],axis=1)
     
     num_train = len(traindata)
     
     totdata = pd.concat([traindata, testdata], ignore_index=True)
     totdata = prepare_data(totdata)
-	
+    
     traindata = totdata.ix[:num_train-1,:]
-	testdata = totdata.ix[num_train:,:]
-	
+    testdata = totdata.ix[num_train:,:]
+    
     # separate male/female data
-    Fmask = (traindata.sex==-1)
-	traindataF = traindata.drop(Fmask[Fmask==False].index)
-	traindataM = traindata.drop(Fmask[Fmask==True].index)
-	traindataF.reset_index(inplace=True)
-	traindataM.reset_index(inplace=True)
-	del traindataF['sex']
-	del traindataM['sex']
-	targetsF = traindataF.survived
-	targetsM = traindataM.survived
-	del traindataF['survived']
-	del traindataM['survived']
-	
-	Fmask = (testdata.sex==-1)
-	testdataF = testdata.drop(Fmask[Fmask==False].index)
-	testdataM = testdata.drop(Fmask[Fmask==True].index)
-	testdataM.reset_index(inplace=True)
-	traindataM.reset_index(inplace=True)
-	del testdataF['sex']
-	del testdataM['sex']
-	
+    Fmask = (traindata.sex=='female')
+    traindataF = traindata.drop(Fmask[Fmask==False].index)
+    traindataM = traindata.drop(Fmask[Fmask==True].index)
+    traindataF.reset_index(inplace=True)
+    traindataM.reset_index(inplace=True)
+    del traindataF['sex']
+    del traindataM['sex']
+    targetsF = traindataF.survived
+    targetsM = traindataM.survived
+    del traindataF['survived']
+    del traindataM['survived']
+    
+    Fmask = (testdata.sex=='female')
+    testdataF = testdata.drop(Fmask[Fmask==False].index)
+    testdataM = testdata.drop(Fmask[Fmask==True].index)
+    testdataM.reset_index(inplace=True)
+    traindataM.reset_index(inplace=True)
+    del testdataF['sex']
+    del testdataM['sex']
+    
     # feature selection
     selectorF = feature_selection.SelectKBest(feature_selection.f_classif, k=50)
-    traindataF = selector.fit_transform(traindataF, targetsF)
-    testdataF = selector.transform(testdataF)
+    traindataF = selectorF.fit_transform(traindataF, targetsF)
+    testdataF = selectorF.transform(testdataF.fillna(value=0))
     selectorM = feature_selection.SelectKBest(feature_selection.f_classif, k=50)
-    traindataM = selector.fit_transform(traindataM, targetsM)
-    testdataM = selector.transform(testdataM)
+    traindataM = selectorM.fit_transform(traindataM, targetsM)
+    testdataM = selectorM.transform(testdataM.fillna(value=0))
     
     modelsF = train_model(traindataF, targetsF)
     modelsM = train_model(traindataM, targetsM)
@@ -194,24 +184,24 @@ if __name__ == '__main__':
     prediction = [[0]*418 for i in range(len(modelsF))]
     for i in range(len(modelsF)):
         prediction[i] = modelsF[i].predict(testdataF).tolist()
-    
+        
     predF = pd.DataFrame(prediction).median().astype(int)
     
     predtot = [0]*418
-	predtot = pd.Series(predtot)
-	
-	predtot[Fmask[Fmask==True].index.tolist()] = predF
-	
+    predtot = pd.Series(predtot)
+    
+    predtot[Fmask[Fmask==True].reset_index().index.tolist()] = predF
+    
     # make male prediction
     prediction = [[0]*418 for i in range(len(modelsM))]
     for i in range(len(modelsM)):
         prediction[i] = modelsM[i].predict(testdataM).tolist()
-    
+        
     predM = pd.DataFrame(prediction).median().astype(int)
     
-	predtot[Fmask[Fmask==False].index.tolist()] = predM
-	
-	pid = pd.Series(range(892,1310))
+    predtot[Fmask[Fmask==False].reset_index().index.tolist()] = predM
+    
+    pid = pd.Series(range(892,1310))
     predfinal = pd.DataFrame({'PassengerID': pid, 'Survived': predtot})
     
     # save to CSV
