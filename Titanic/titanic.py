@@ -93,14 +93,17 @@ def prepare_data(d):
     combo = ['sex','pclass','parch','sibsp','cabin','embarked']
     L = list(ascii_lowercase)
     LL = [2*x for x in L]
+    LLL = [3*x for x in L]
     comb2feats = pd.DataFrame(construct_combined_features(np.array(d[combo]), degree=2), columns=L[:15], dtype=object)
     comb3feats = pd.DataFrame(construct_combined_features(np.array(d[combo]), degree=3), columns=LL[:20], dtype=object)
-    d = pd.concat([d, comb2feats, comb3feats], axis=1)
+    comb4feats = pd.DataFrame(construct_combined_features(np.array(d[combo]), degree=4), columns=LLL[:15], dtype=object)
+    d = pd.concat([d, comb2feats, comb3feats, comb4feats], axis=1)
     
     # one-hot encoding for categorical features
     d, _, _ = one_hot_dataframe(d, ['embarked', 'cabin'], replace=True)
     d, _, _ = one_hot_dataframe(d, L[:15], replace=True)
     d, _, _ = one_hot_dataframe(d, LL[:20], replace=True)
+    d, _, _ = one_hot_dataframe(d, LLL[:15], replace=True)
     
     return d
 
@@ -111,16 +114,18 @@ def train_model(traindata, targets):
 #    max_depth=4, subsample=0.3, max_features=8, min_samples_leaf=10), \
 #    ensemble.GradientBoostingClassifier(n_estimators=500, learning_rate=0.06, \
 #    max_depth=6, subsample=0.5, max_features=6, min_samples_leaf=15), \
-    ensemble.RandomForestClassifier(n_estimators=100, \
-    max_depth=8, max_features='auto', min_samples_leaf=30), \
-    ensemble.RandomForestClassifier(n_estimators=300, \
-    max_depth=7, max_features='auto', min_samples_leaf=25), \
+#    ensemble.GradientBoostingClassifier(n_estimators=750, learning_rate=0.02, \
+#    max_depth=7, subsample=0.7, max_features=4, min_samples_leaf=20) \
+    ensemble.RandomForestClassifier(n_estimators=250, \
+    max_depth=2, max_features='sqrt', min_samples_leaf=25), \
     ensemble.RandomForestClassifier(n_estimators=500, \
-    max_depth=6, max_features='auto', min_samples_leaf=20) \
+    max_depth=3, max_features='sqrt', min_samples_leaf=30), \
+    ensemble.RandomForestClassifier(n_estimators=750, \
+    max_depth=2, max_features='sqrt', min_samples_leaf=25) \
     ]
     
     # use StratifiedKFold, because survived 0/1 is not evenly distributed
-    cv = cross_validation.StratifiedKFold(targets, n_folds=8)
+    cv = cross_validation.StratifiedKFold(targets, n_folds=3)
     
     scores = [0]*len(models)
     for i in range(len(models)):
@@ -170,10 +175,10 @@ if __name__ == '__main__':
     del testdataM['sex']
     
     # feature selection
-    selectorF = feature_selection.SelectKBest(feature_selection.f_classif, k=50)
+    selectorF = feature_selection.SelectKBest(feature_selection.f_classif, k=20)
     traindataF = selectorF.fit_transform(traindataF, targetsF)
     testdataF = selectorF.transform(testdataF.fillna(value=0))
-    selectorM = feature_selection.SelectKBest(feature_selection.f_classif, k=50)
+    selectorM = feature_selection.SelectKBest(feature_selection.f_classif, k=20)
     traindataM = selectorM.fit_transform(traindataM, targetsM)
     testdataM = selectorM.transform(testdataM.fillna(value=0))
     
@@ -190,7 +195,8 @@ if __name__ == '__main__':
     predtot = [0]*418
     predtot = pd.Series(predtot)
     
-    predtot[Fmask[Fmask==True].reset_index().index.tolist()] = predF
+    Finds = [x-891 for x in Fmask[Fmask==True].index.tolist()]
+    predtot[Finds] = predF
     
     # make male prediction
     prediction = [[0]*418 for i in range(len(modelsM))]
@@ -199,7 +205,8 @@ if __name__ == '__main__':
         
     predM = pd.DataFrame(prediction).median().astype(int)
     
-    predtot[Fmask[Fmask==False].reset_index().index.tolist()] = predM
+    Minds = [x-891 for x in Fmask[Fmask==False].index.tolist()]
+    predtot[Minds] = predM
     
     pid = pd.Series(range(892,1310))
     predfinal = pd.DataFrame({'PassengerID': pid, 'Survived': predtot})
