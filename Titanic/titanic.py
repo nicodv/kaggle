@@ -108,7 +108,7 @@ def prepare_data(d):
     d = pd.concat([d, comb2feats, comb3feats], axis=1)
     
     # one-hot encoding for categorical features
-    d, _, _ = one_hot_dataframe(d, ['sex','embarked', 'cabin'], replace=True)
+    d, _, _ = one_hot_dataframe(d, ['embarked', 'cabin'], replace=True)
     d, _, _ = one_hot_dataframe(d, L[:15], replace=True)
     d, _, _ = one_hot_dataframe(d, LL[:20], replace=True)
     
@@ -154,24 +154,66 @@ if __name__ == '__main__':
     
     totdata = pd.concat([traindata, testdata], ignore_index=True)
     totdata = prepare_data(totdata)
-    
-    # feature selection
-    selector = feature_selection.SelectKBest(feature_selection.f_classif, k=80)
+	
     traindata = totdata.ix[:num_train-1,:]
-    traindata = selector.fit_transform(traindata, targets)
-    testdata = selector.transform(totdata.ix[num_train:,:])
+	testdata = totdata.ix[num_train:,:]
+	
+    # separate male/female data
+    Fmask = (traindata.sex==-1)
+	traindataF = traindata.drop(Fmask[Fmask==False].index)
+	traindataM = traindata.drop(Fmask[Fmask==True].index)
+	traindataF.reset_index(inplace=True)
+	traindataM.reset_index(inplace=True)
+	del traindataF['sex']
+	del traindataM['sex']
+	targetsF = traindataF.survived
+	targetsM = traindataM.survived
+	del traindataF['survived']
+	del traindataM['survived']
+	
+	Fmask = (testdata.sex==-1)
+	testdataF = testdata.drop(Fmask[Fmask==False].index)
+	testdataM = testdata.drop(Fmask[Fmask==True].index)
+	testdataM.reset_index(inplace=True)
+	traindataM.reset_index(inplace=True)
+	del testdataF['sex']
+	del testdataM['sex']
+	
+    # feature selection
+    selectorF = feature_selection.SelectKBest(feature_selection.f_classif, k=80)
+    traindataF = selector.fit_transform(traindataF, targetsF)
+    testdataF = selector.transform(testdataF)
+    selectorM = feature_selection.SelectKBest(feature_selection.f_classif, k=80)
+    traindataM = selector.fit_transform(traindataM, targetsM)
+    testdataM = selector.transform(testdataM)
     
-    models = train_model(traindata, targets)
+    modelsF = train_model(traindataF, targetsF)
+    modelsM = train_model(traindataM, targetsM)
     
-    # make prediction
-    prediction = [[0]*418 for i in range(len(models))]
-    for i in range(len(models)):
-        prediction[i] = models[i].predict(testdata).tolist()
+    # make female prediction
+    prediction = [[0]*418 for i in range(len(modelsF))]
+    for i in range(len(modelsF)):
+        prediction[i] = modelsF[i].predict(testdataF).tolist()
     
-    pred = pd.DataFrame(prediction).median().astype(int)
-    pid = pd.Series(range(892,1310))
-    pred2 = pd.DataFrame({'PassengerID': pid, 'Survived': pred})
+    predF = pd.DataFrame(prediction).median().astype(int)
+    
+    predtot = [0]*418
+	predtot = pd.Series(predtot)
+	
+	predtot[Fmask[Fmask==True].index.tolist()] = predF
+	
+    # make male prediction
+    prediction = [[0]*418 for i in range(len(modelsM))]
+    for i in range(len(modelsM)):
+        prediction[i] = modelsM[i].predict(testdataM).tolist()
+    
+    predM = pd.DataFrame(prediction).median().astype(int)
+    
+	predtot[Fmask[Fmask==False].index.tolist()] = predM
+	
+	pid = pd.Series(range(892,1310))
+    predfinal = pd.DataFrame({'PassengerID': pid, 'Survived': predtot})
     
     # save to CSV
-    pred2.to_csv(DATA_DIR+'submission.csv', sep=',', header=True, index=False)
+    predfinal.to_csv(DATA_DIR+'submission.csv', sep=',', header=True, index=False)
     
