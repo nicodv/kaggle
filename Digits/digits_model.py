@@ -107,21 +107,21 @@ def get_comb_models(traindata, targets, crossval=True):
 
 if __name__ == '__main__':
     
-    submission = True
+    submission = False
     batch_size = 100
     
     preprocessors = ('normal', 'nozca', 'rotate', 'hshear', 'vshear', 'patch')
     
-    accuracies = []
-    outtrainset = []
-    outvalidset = []
-    outtestset = []
+    accuracies = [0]*len(preprocessors)
+    outtrainset = [0]*len(preprocessors)
+    outvalidset = [0]*len(preprocessors)
+    outtestset = [0]*len(preprocessors)
     for ii, preprocessor in enumerate(preprocessors):
         trainset,validset,testset = Digits.digits_data.get_dataset(tot=submission, preprocessor=preprocessor)
         
         # build and train classifiers for submodels
         model = get_maxout([28,28,1], batch_size=batch_size)
-        get_trainer(model, trainset, validset, epochs=200, batch_size=batch_size).main_loop()
+        get_trainer(model, trainset, validset, epochs=2, batch_size=batch_size).main_loop()
         
         # validate model
         outtrainset[ii] = get_output(model,trainset,-1)
@@ -144,7 +144,7 @@ if __name__ == '__main__':
     else:
         models = get_comb_models(outtrainset, trainset.y, crossval=False)
         for ii in range(len(models)):
-            comboutputs[ii] = models[ii].predict_proba(outtestset)
+            comboutputs = comboutputs.append(models[ii].predict_proba(outtestset))
         
         # take mean of classifiers and save output as submission
         np.savetxt(DATA_DIR+'submission.csv', np.argmax(np.mean(comboutputs, axis=0),axis=1))
