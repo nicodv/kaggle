@@ -130,7 +130,7 @@ if __name__ == '__main__':
         if not submission:
             # validset is udes to evaluate maxout network performance
             outvalidset[ii] = get_output(model,validset,-1)
-            accuracies[ii] = accuracy_score(np.argmax(validset.get_targets(),axis=1),np.argmax(outvalidset[ii],axis=1))
+            accuracies[ii] = accuracy_score(np.argmax(validset.get_targets(),axis=1),np.argmax(outvalidset[ii],axis=0))
         else:
             outtestset[ii] = get_output(model,testset,-1)
     
