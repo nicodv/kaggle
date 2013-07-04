@@ -86,12 +86,16 @@ def get_comb_models(traindata, targets, crossval=True):
     traindata = np.array(traindata).transpose((1,0,2))
     traindata = np.reshape(traindata,[traindata.shape[0],-1])
     
-    models = [ensemble.GradientBoostingClassifier(n_estimators=100, learning_rate=0.05, \
-                max_depth=20, subsample=0.5, max_features=120, min_samples_leaf=20),
-            ensemble.GradientBoostingClassifier(n_estimators=200, learning_rate=0.05, \
-                max_depth=40, subsample=0.5, max_features=120, min_samples_leaf=20),
-            ensemble.GradientBoostingClassifier(n_estimators=400, learning_rate=0.05, \
-                max_depth=60, subsample=0.5, max_features=120, min_samples_leaf=20)]
+    # needs to be not one-hot
+    targets = targets.argmax(axis=1)
+    
+    models = [ensemble.GradientBoostingClassifier(n_estimators=10, learning_rate=0.05, \
+                max_depth=6, subsample=0.5, max_features='auto', min_samples_leaf=30),
+#            ensemble.GradientBoostingClassifier(n_estimators=200, learning_rate=0.05, \
+#                max_depth=8, subsample=0.5, max_features='auto', min_samples_leaf=40),
+#            ensemble.GradientBoostingClassifier(n_estimators=400, learning_rate=0.05, \
+#                max_depth=10, subsample=0.5, max_features='auto', min_samples_leaf=50) \
+            ]
     
     if crossval:
         # use StratifiedKFold, because survived 0/1 is not evenly distributed
@@ -102,7 +106,7 @@ def get_comb_models(traindata, targets, crossval=True):
         if crossval:
             # get scores
             scores[ii] = cross_validation.cross_val_score(models[ii], traindata, targets, \
-                        cv=cv, n_jobs=-1, scoring='accuracy')
+                        cv=cv, n_jobs=1, scoring='accuracy')
             print "Cross-validation accuracy on the training set for model %d:" % ii
             print "%0.3f (+/-%0.03f)" % (scores[ii].mean(), scores[ii].std() / 2)
         else:
@@ -112,7 +116,7 @@ def get_comb_models(traindata, targets, crossval=True):
 
 if __name__ == '__main__':
     
-    submission = False
+    submission = True
     batch_size = 100
     
     preprocessors = ('normal', 'nozca', 'rotate', 'emboss', 'hshear', 'vshear', 'patch')
@@ -126,7 +130,7 @@ if __name__ == '__main__':
         
         # build and train classifiers for submodels
         model = get_maxout([28,28,1], batch_size=batch_size)
-        get_trainer(model, trainset, validset, epochs=5, batch_size=batch_size).main_loop()
+        get_trainer(model, trainset, validset, epochs=200, batch_size=batch_size).main_loop()
         
         outtrainset[ii] = get_output(model,trainset,-1)
         
@@ -153,7 +157,8 @@ if __name__ == '__main__':
         outtestset = np.reshape(outtestset,[outtestset.shape[0],-1])
         
         for ii in range(len(models)):
-            comboutputs = comboutputs.append(models[ii].predict_proba(outtestset))
+            comboutputs.append(models[ii].predict_proba(outtestset))
         
         # take mean of classifiers and save output as submission
-        np.savetxt(DATA_DIR+'submission.csv', np.argmax(np.mean(comboutputs, axis=0),axis=1))
+        np.savetxt(DATA_DIR+'submission.csv', np.argmax(np.mean(comboutputs, axis=0),axis=1), header='LabelID', fmt='%1.0f')
+    
