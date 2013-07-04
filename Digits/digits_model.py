@@ -78,7 +78,7 @@ def get_output(model, tdata, layerindex, batch_size=100):
         # remove the filler
         output = output[:-extralength]
     
-    return output
+    return output.T
 
 def get_comb_models(traindata, targets, crossval=True):
     
