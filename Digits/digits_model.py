@@ -62,7 +62,7 @@ def get_output(model, tdata, layerindex, batch_size=100):
     extralength = batch_size - data.shape[3]%batch_size
     
     if extralength < batch_size:
-        data = np.append(data,np.zeros([extralength, data.shape[1],data.shape[2],data.shape[3]]), axis=0)
+        data = np.append(data,np.zeros([extralength, data.shape[0],data.shape[1],data.shape[2]]), axis=3)
         data = data.astype('float32')
     
     propagate = function([Xb], Yb, allow_input_downcast=True)
@@ -76,11 +76,15 @@ def get_output(model, tdata, layerindex, batch_size=100):
     
     if extralength < batch_size:
         # remove the filler
-        output = output[:-extralength]
+        output = output[:-extralength,:]
     
-    return output.T
+    return output
 
 def get_comb_models(traindata, targets, crossval=True):
+    # traindata: list with NumExamples * NumOutputs(=10) array with length 'no. preprocessors'
+    # reshape to NumExamples * [NumPreprocessors * NumOutputs]
+    traindata = np.array(traindata).transpose((1,0,2))
+    traindata = np.reshape(traindata,[traindata.shape[0],-1])
     
     models = [ensemble.GradientBoostingClassifier(n_estimators=100, learning_rate=0.05, \
                 max_depth=20, subsample=0.5, max_features=120, min_samples_leaf=20),
@@ -94,15 +98,15 @@ def get_comb_models(traindata, targets, crossval=True):
         cv = cross_validation.StratifiedKFold(targets, n_folds=5)
         scores = [0]*len(models)
     
-    for i in range(len(models)):
+    for ii in range(len(models)):
         if crossval:
             # get scores
-            scores[i] = cross_validation.cross_val_score(models[i], traindata, targets, \
+            scores[ii] = cross_validation.cross_val_score(models[ii], traindata, targets, \
                         cv=cv, n_jobs=-1, scoring='accuracy')
-            print "Cross-validation accuracy on the training set for model %d:" % i
-            print "%0.3f (+/-%0.03f)" % (scores[i].mean(), scores[i].std() / 2)
+            print "Cross-validation accuracy on the training set for model %d:" % ii
+            print "%0.3f (+/-%0.03f)" % (scores[ii].mean(), scores[ii].std() / 2)
         else:
-            models[i].fit(traindata, targets)
+            models[ii].fit(traindata, targets)
     
     return models
 
@@ -124,13 +128,12 @@ if __name__ == '__main__':
         model = get_maxout([28,28,1], batch_size=batch_size)
         get_trainer(model, trainset, validset, epochs=5, batch_size=batch_size).main_loop()
         
-        # validate model
         outtrainset[ii] = get_output(model,trainset,-1)
         
         if not submission:
-            # validset is udes to evaluate maxout network performance
+            # validset is used to evaluate maxout network performance
             outvalidset[ii] = get_output(model,validset,-1)
-            accuracies[ii] = accuracy_score(np.argmax(validset.get_targets(),axis=1),np.argmax(outvalidset[ii],axis=0))
+            accuracies[ii] = accuracy_score(np.argmax(validset.get_targets(),axis=1),np.argmax(outvalidset[ii],axis=1))
         else:
             outtestset[ii] = get_output(model,testset,-1)
     
@@ -144,6 +147,11 @@ if __name__ == '__main__':
         models = get_comb_models(outtrainset, trainset.y, crossval=True)
     else:
         models = get_comb_models(outtrainset, trainset.y, crossval=False)
+        # outtestset: list with NumExamples * NumOutputs(=10) array with length 'no. preprocessors'
+        # reshape to NumExamples * [NumPreprocessors * NumOutputs]
+        outtestset = np.array(outtestset).transpose((1,0,2))
+        outtestset = np.reshape(outtestset,[outtestset.shape[0],-1])
+        
         for ii in range(len(models)):
             comboutputs = comboutputs.append(models[ii].predict_proba(outtestset))
         
