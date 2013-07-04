@@ -129,11 +129,13 @@ def get_dataset(tot=False, preprocessor='normal'):
                     elif preprocessor == 'emboss':
                         img = emboss(img)
                     elif preprocessor == 'hshear':
-                        coef = np.random.rand()
-                        img = img.transform((28,28), Image.AFFINE, (1,-0.5+coef,0,0,1,0), Image.BILINEAR)
+                        # coef = 0 means unsheared
+                        coef = -0.5 + np.random.rand()
+                        # note: image is moved with (coef/2)*28 to center it after shearing
+                        img = img.transform((28,28), Image.AFFINE, (1,coef,-(coef/2)*28,0,1,0), Image.BILINEAR)
                     elif preprocessor == 'vshear':
-                        coef = np.random.rand()
-                        img = img.transform((28,28), Image.AFFINE, (1,0,0,-0.5+coef,1,0), Image.BILINEAR)
+                        coef = -0.5 + np.random.rand()
+                        img = img.transform((28,28), Image.AFFINE, (1,0,0,coef,1,-(coef/2)*28), Image.BILINEAR)
                     elif preprocessor == 'patch':
                         x1 = np.random.randint(-4, 4)
                         y1 = np.random.randint(-4, 4)
