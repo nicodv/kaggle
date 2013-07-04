@@ -14,6 +14,7 @@ from pylearn2.space import Conv2DSpace
 from pylearn2.training_algorithms.sgd import SGD, ExponentialDecay, MomentumAdjustor
 from pylearn2.termination_criteria import EpochCounter
 from sklearn.metrics.metrics import accuracy_score
+from sklearn import ensemble
 
 DATA_DIR = '/home/nico/datasets/Kaggle/Digits/'
 
