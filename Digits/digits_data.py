@@ -115,8 +115,12 @@ def get_dataset(tot=False, preprocessor='normal'):
         if preprocessor not in ('normal','nozca'):
             for data in (trainset, validset, tottrainset, testset):
                 for ii in range(data.X.shape[0]):
-                    # convert to PIL image
-                    img = Image.fromarray(data.X[ii,:].reshape(28, 28) * 255.).convert('L')
+                    # normalize to [0,1]
+                    dmax = np.max(data.X[ii,:])
+                    dmin = np.min(data.X[ii,:])
+                    dnorm = (data.X[ii,:] - dmin) / (dmax - dmin)
+                    # and convert to PIL image
+                    img = Image.fromarray(dnorm.reshape(28, 28) * 255.).convert('L')
                     
                     # apply preprocessor
                     if preprocessor == 'rotate':
