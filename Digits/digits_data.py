@@ -9,6 +9,8 @@ import pylearn2.utils.serial as serial
 
 from PIL import Image
 
+rng = np.random.RandomState(42)
+
 DATA_DIR = '/home/nico/datasets/Kaggle/Digits/'
 
 def initial_read():
@@ -112,9 +114,9 @@ def get_dataset(tot=False, preprocessor='normal'):
         
         if preprocessor not in ('normal','nozca'):
             for data in (trainset, validset, tottrainset, testset):
-                for ii in range(data.X.shape[3]):
+                for ii in range(data.X.shape[0]):
                     # convert to PIL image
-                    img = Image.fromarray(data.X[1,:,:,ii].reshape(28, 28) * 255.).convert('L')
+                    img = Image.fromarray(data.X[ii,:].reshape(28, 28) * 255.).convert('L')
                     
                     # apply preprocessor
                     if preprocessor == 'rotate':
@@ -136,7 +138,7 @@ def get_dataset(tot=False, preprocessor='normal'):
                         img = img.transform((28,28), Image.EXTENT, (x1, y1, 28+x2, 28+y2), Image.BILINEAR)
                     
                     # convert back to numpy array
-                    data.X[1,:,:,ii] = np.array(img.getdata()) / 255.
+                    data.X[ii,:] = np.array(img.getdata()) / 255.
         
         # this uses numpy format for storage instead of pickle, for memory reasons
         trainset.use_design_loc(DATA_DIR+'train_'+preprocessor+'_design.npy')
@@ -167,8 +169,8 @@ def emboss(img):
     dep = 2
     
     # defining azimuth, elevation, and depth
-    ele = (ele * 2 * numpy.pi) / 360.
-    azi = (azi * 2 * numpy.pi) / 360.
+    ele = (ele * 2 * np.pi) / 360.
+    azi = (azi * 2 * np.pi) / 360.
 
     a = np.asarray(img).astype('float')
     # find the gradient
