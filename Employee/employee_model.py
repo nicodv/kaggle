@@ -62,18 +62,17 @@ def create_submission(prediction):
 
 # This loop essentially from Paul Duan's starter code
 def cv_loop(X, y, model, N):
-    mean_auc = 0.
-    for i in range(N):
-        X_train, X_cv, y_train, y_cv = cross_validation.train_test_split(
-                                       X, y, test_size=.20, 
-                                       random_state = i*SEED)
-        model.fit(X_train, y_train)
-        preds = model.predict_proba(X_cv)[:,1]
-        auc = metrics.auc_score(y_cv, preds)
-        print "AUC (fold %d/%d): %f" % (i + 1, N, auc)
-        mean_auc += auc
-    return mean_auc/N
-
+    
+    # Change the prediction function for LogisticRegression
+    new_predict = lambda M, x: M.predict_proba[:,1]
+    model.predict = new_predict
+    cv = cross_validation.StratifiedShuffleSplit(y, n_iter=N) 
+    
+    # replacement for cv_loop
+    scores = cross_validation.cross_val_score(model, X, y, score_func=metrics.auc_score, n_jobs=-1, cv=cv)
+    
+    return no.mean(scores)
+    
 
 if __name__ == "__main__":
     
