@@ -153,11 +153,15 @@ if __name__ == '__main__':
         models = get_comb_models(outtrainset, trainset.y, crossval=False)
         # outtestset: list with NumExamples * NumOutputs(=10) array with length 'no. preprocessors'
         # reshape to NumExamples * [NumPreprocessors * NumOutputs]
-        outtestset = np.array(outtestset).transpose((1,0,2))
-        outtestset = np.reshape(outtestset,[outtestset.shape[0],-1])
+        outtestseta = np.array(outtestset).transpose((1,0,2))
+        outtestseta = np.reshape(outtestseta,[outtestseta.shape[0],-1])
+        
+        # just the mean...
+        simple = np.mean(outtestseta.reshape([28000,7,10]),axis=1)
+        simplesubm = np.argmax(simple,axis=1)
         
         for ii in range(len(models)):
-            comboutputs.append(models[ii].predict_proba(outtestset))
+            comboutputs.append(models[ii].predict_proba(outtestseta))
         
         # take mean of classifiers and save output as submission
         ImageId = range(1,28001)
