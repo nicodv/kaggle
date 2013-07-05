@@ -160,5 +160,8 @@ if __name__ == '__main__':
             comboutputs.append(models[ii].predict_proba(outtestset))
         
         # take mean of classifiers and save output as submission
-        np.savetxt(DATA_DIR+'submission.csv', np.argmax(np.mean(comboutputs, axis=0),axis=1), header='LabelID', fmt='%1.0f')
+        ImageId = range(1,28001)
+        subm = np.argmax(np.mean(comboutputs, axis=0),axis=1)
+        pdsubm = pd.DataFrame({'ImageId': ImageId, 'Label': subm})
+        pdsubm.to_csv(DATA_DIR+'submission.csv', header=True, index=False, fmt='%1.0f')
     
