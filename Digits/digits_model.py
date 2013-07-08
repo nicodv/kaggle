@@ -14,7 +14,7 @@ from pylearn2.space import Conv2DSpace
 from pylearn2.training_algorithms.sgd import SGD, ExponentialDecay, MomentumAdjustor
 from pylearn2.termination_criteria import EpochCounter
 from sklearn.metrics.metrics import accuracy_score
-from sklearn import ensemble, cross_validation
+from sklearn import ensemble, cross_validation, linear_model
 
 DATA_DIR = '/home/nico/datasets/Kaggle/Digits/'
 
@@ -89,13 +89,7 @@ def get_comb_models(traindata, targets, crossval=True):
     # needs to be not one-hot
     targets = targets.argmax(axis=1)
     
-    models = [ensemble.GradientBoostingClassifier(n_estimators=10, learning_rate=0.05, \
-                max_depth=6, subsample=0.5, max_features='auto', min_samples_leaf=30),
-#            ensemble.GradientBoostingClassifier(n_estimators=200, learning_rate=0.05, \
-#                max_depth=8, subsample=0.5, max_features='auto', min_samples_leaf=40),
-#            ensemble.GradientBoostingClassifier(n_estimators=400, learning_rate=0.05, \
-#                max_depth=10, subsample=0.5, max_features='auto', min_samples_leaf=50) \
-            ]
+    models = [linear_model.LogisticRegression(penalty='l2', dual=False, C=1., fit_intercept=False, tol=1e-12)]
     
     if crossval:
         # use StratifiedKFold, because survived 0/1 is not evenly distributed
@@ -117,7 +111,7 @@ def get_comb_models(traindata, targets, crossval=True):
 if __name__ == '__main__':
     
     submission = True
-    batch_size = 100
+    batch_size = 128
     
     preprocessors = ('normal', 'rotate', 'emboss', 'hshear', 'vshear', 'patch')
     
@@ -130,7 +124,7 @@ if __name__ == '__main__':
         
         # build and train classifiers for submodels
         model = get_maxout([28,28,1], batch_size=batch_size)
-        get_trainer(model, trainset, validset, epochs=200, batch_size=batch_size).main_loop()
+        get_trainer(model, trainset, validset, epochs=250, batch_size=batch_size).main_loop()
         
         outtrainset[ii] = get_output(model,trainset,-1)
         
@@ -156,16 +150,17 @@ if __name__ == '__main__':
         outtestseta = np.array(outtestset).transpose((1,0,2))
         outtestseta = np.reshape(outtestseta,[outtestseta.shape[0],-1])
         
-        # just the mean...
-        simple = np.mean(outtestseta.reshape([28000,7,10]),axis=1)
-        simplesubm = np.argmax(simple,axis=1)
-        
         for ii in range(len(models)):
             comboutputs.append(models[ii].predict_proba(outtestseta))
         
         # take mean of classifiers and save output as submission
         ImageId = range(1,28001)
         subm = np.argmax(np.mean(comboutputs, axis=0),axis=1)
-        pdsubm = pd.DataFrame({'ImageId': ImageId, 'Label': subm})
+        
+        # or just take the mean...
+        simple = np.mean(outtestseta.reshape([28000,len(preprocessors),10]),axis=1)
+        simplesubm = np.argmax(simple,axis=1)
+        
+        pdsubm = pd.DataFrame({'ImageId': ImageId, 'Label': simplesubm})
         pdsubm.to_csv(DATA_DIR+'submission.csv', header=True, index=False, fmt='%1.0f')
     
