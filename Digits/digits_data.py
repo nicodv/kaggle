@@ -124,23 +124,23 @@ def get_dataset(tot=False, preprocessor='normal'):
                     
                     # apply preprocessor
                     if preprocessor == 'rotate':
-                        rot = rng.randint(-40, 40)
+                        rot = rng.randint(0, 359)
                         img = img.rotate(rot, Image.BILINEAR)
                     elif preprocessor == 'emboss':
                         img = emboss(img)
                     elif preprocessor == 'hshear':
                         # coef = 0 means unsheared
-                        coef = -0.5 + np.random.rand()
+                        coef = -1 + np.random.rand()*2
                         # note: image is moved with (coef/2)*28 to center it after shearing
                         img = img.transform((28,28), Image.AFFINE, (1,coef,-(coef/2)*28,0,1,0), Image.BILINEAR)
                     elif preprocessor == 'vshear':
-                        coef = -0.5 + np.random.rand()
+                        coef = -1 + np.random.rand()*2
                         img = img.transform((28,28), Image.AFFINE, (1,0,0,coef,1,-(coef/2)*28), Image.BILINEAR)
                     elif preprocessor == 'patch':
-                        x1 = np.random.randint(-4, 4)
-                        y1 = np.random.randint(-4, 4)
-                        x2 = np.random.randint(-4, 4)
-                        y2 = np.random.randint(-4, 4)
+                        x1 = np.random.randint(-6, 6)
+                        y1 = np.random.randint(-6, 6)
+                        x2 = np.random.randint(-6, 6)
+                        y2 = np.random.randint(-6, 6)
                         img = img.transform((28,28), Image.EXTENT, (x1, y1, 28+x2, 28+y2), Image.BILINEAR)
                     
                     # convert back to numpy array

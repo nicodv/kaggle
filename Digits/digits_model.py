@@ -119,7 +119,7 @@ if __name__ == '__main__':
     submission = True
     batch_size = 100
     
-    preprocessors = ('normal', 'nozca', 'rotate', 'emboss', 'hshear', 'vshear', 'patch')
+    preprocessors = ('normal', 'rotate', 'emboss', 'hshear', 'vshear', 'patch')
     
     accuracies = [0]*len(preprocessors)
     outtrainset = [0]*len(preprocessors)
