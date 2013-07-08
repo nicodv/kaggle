@@ -145,6 +145,12 @@ def get_dataset(tot=False, preprocessor='normal'):
                     
                     # convert back to numpy array
                     data.X[ii,:] = np.array(img.getdata()) / 255.
+                    
+                    if preprocessor == 'noisy':
+                        # add noise
+                        data.X[ii,:] += np.random.randn(28*28) * 0.25
+                        # bound between [0,1]
+                        data.X[ii,:] = np.minimum(np.ones(28*28), np.maximum(np.zeros(28,28), data.X[ii,:]))
         
         # this uses numpy format for storage instead of pickle, for memory reasons
         trainset.use_design_loc(DATA_DIR+'train_'+preprocessor+'_design.npy')
