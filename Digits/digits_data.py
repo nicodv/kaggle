@@ -124,7 +124,7 @@ def get_dataset(tot=False, preprocessor='normal'):
                     
                     # apply preprocessor
                     if preprocessor == 'rotate':
-                        rot = rng.randint(0, 359)
+                        rot = rng.randint(0, 360)
                         img = img.rotate(rot, Image.BILINEAR)
                     elif preprocessor == 'emboss':
                         img = emboss(img)
