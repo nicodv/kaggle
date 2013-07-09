@@ -124,7 +124,7 @@ if __name__ == '__main__':
         
         # build and train classifiers for submodels
         model = get_maxout([28,28,1], batch_size=batch_size)
-        get_trainer(model, trainset, validset, epochs=5, batch_size=batch_size).main_loop()
+        get_trainer(model, trainset, validset, epochs=250, batch_size=batch_size).main_loop()
         
         outtrainset[ii] = get_output(model,trainset,-1)
         
