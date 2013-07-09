@@ -12,7 +12,7 @@ from pylearn2.models.maxout import MaxoutConvC01B
 from pylearn2.costs.mlp.dropout import Dropout
 from pylearn2.space import Conv2DSpace
 from pylearn2.training_algorithms.sgd import SGD, ExponentialDecay, MomentumAdjustor
-from pylearn2.termination_criteria import EpochCounter
+from pylearn2.termination_criteria import EpochCounter, MonitorBased
 from sklearn.metrics.metrics import accuracy_score
 from sklearn import ensemble, cross_validation, linear_model
 
@@ -46,11 +46,11 @@ def get_trainer(model, trainset, validset, epochs=20, batch_size=100):
         cost = Dropout(input_include_probs={'h0': 0.8},
                         input_scales={'h0': 1.},
                         default_input_include_prob=0.5, default_input_scale=1./0.5),
-        termination_criterion = EpochCounter(epochs),
+        termination_criterion = MonitorBased(channel_name='valid_y_misclass', prop_decrease=0., N=100),
         update_callbacks = ExponentialDecay(decay_factor=1.00004, min_lr=0.000001)
     )
     return Train(model=model, algorithm=train_algo, dataset=trainset, save_freq=0, save_path='epoch', \
-            extensions=[MomentumAdjustor(final_momentum=0.7, start=0, saturate=int(epochs*0.8)), ])
+            extensions=[MomentumAdjustor(final_momentum=0.7, start=0, saturate=250])
 
 def get_output(model, tdata, layerindex, batch_size=100):
     # get output submodel classifiers
@@ -110,7 +110,7 @@ def get_comb_models(traindata, targets, crossval=True):
 
 if __name__ == '__main__':
     
-    submission = False
+    submission = True
     batch_size = 128
     
     preprocessors = ('normal', 'rotate', 'noisy', 'hshear', 'vshear', 'patch')
@@ -124,7 +124,7 @@ if __name__ == '__main__':
         
         # build and train classifiers for submodels
         model = get_maxout([28,28,1], batch_size=batch_size)
-        get_trainer(model, trainset, validset, epochs=250, batch_size=batch_size).main_loop()
+        get_trainer(model, trainset, validset, epochs=1000, batch_size=batch_size).main_loop()
         
         outtrainset[ii] = get_output(model,trainset,-1)
         
