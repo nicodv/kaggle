@@ -46,11 +46,11 @@ def get_trainer(model, trainset, validset, epochs=20, batch_size=100):
         cost = Dropout(input_include_probs={'h0': 0.8},
                         input_scales={'h0': 1.},
                         default_input_include_prob=0.5, default_input_scale=1./0.5),
-        termination_criterion = MonitorBased(channel_name='valid_y_misclass', prop_decrease=0., N=100),
+        termination_criterion = MonitorBased(channel_name='y_misclass', prop_decrease=0., N=100),
         update_callbacks = ExponentialDecay(decay_factor=1.00004, min_lr=0.000001)
     )
     return Train(model=model, algorithm=train_algo, dataset=trainset, save_freq=0, save_path='epoch', \
-            extensions=[MomentumAdjustor(final_momentum=0.7, start=0, saturate=250])
+            extensions=[MomentumAdjustor(final_momentum=0.7, start=0, saturate=250)])
 
 def get_output(model, tdata, layerindex, batch_size=100):
     # get output submodel classifiers
@@ -115,6 +115,7 @@ if __name__ == '__main__':
     
     preprocessors = ('normal', 'rotate', 'noisy', 'hshear', 'vshear', 'patch')
     
+    models = [0]*len(preprocessors)
     accuracies = [0]*len(preprocessors)
     outtrainset = [0]*len(preprocessors)
     outvalidset = [0]*len(preprocessors)
@@ -123,17 +124,17 @@ if __name__ == '__main__':
         trainset,validset,testset = Digits.digits_data.get_dataset(tot=submission, preprocessor=preprocessor)
         
         # build and train classifiers for submodels
-        model = get_maxout([28,28,1], batch_size=batch_size)
-        get_trainer(model, trainset, validset, epochs=1000, batch_size=batch_size).main_loop()
+        models[ii] = get_maxout([28,28,1], batch_size=batch_size)
+        get_trainer(models[ii], trainset, validset, epochs=1000, batch_size=batch_size).main_loop()
         
-        outtrainset[ii] = get_output(model,trainset,-1)
+        outtrainset[ii] = get_output(models[ii],trainset,-1)
         
         if not submission:
             # validset is used to evaluate maxout network performance
-            outvalidset[ii] = get_output(model,validset,-1)
+            outvalidset[ii] = get_output(models[ii],validset,-1)
             accuracies[ii] = accuracy_score(np.argmax(validset.get_targets(),axis=1),np.argmax(outvalidset[ii],axis=1))
         else:
-            outtestset[ii] = get_output(model,testset,-1)
+            outtestset[ii] = get_output(models[ii],testset,-1)
     
     if not submission:
         print(accuracies)
@@ -142,16 +143,16 @@ if __name__ == '__main__':
     comboutputs = []
     if not submission:
         # outtrainset is used to evaluate comb models
-        models = get_comb_models(outtrainset, trainset.y, crossval=True)
+        cmodels = get_comb_models(outtrainset, trainset.y, crossval=True)
     else:
-        models = get_comb_models(outtrainset, trainset.y, crossval=False)
+        cmodels = get_comb_models(outtrainset, trainset.y, crossval=False)
         # outtestset: list with NumExamples * NumOutputs(=10) array with length 'no. preprocessors'
         # reshape to NumExamples * [NumPreprocessors * NumOutputs]
         outtestseta = np.array(outtestset).transpose((1,0,2))
         outtestseta = np.reshape(outtestseta,[outtestseta.shape[0],-1])
         
-        for ii in range(len(models)):
-            comboutputs.append(models[ii].predict_proba(outtestseta))
+        for ii in range(len(cmodels)):
+            comboutputs.append(cmodels[ii].predict_proba(outtestseta))
         
         # take mean of classifiers and save output as submission
         ImageId = range(1,28001)
