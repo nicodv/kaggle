@@ -124,7 +124,7 @@ def get_dataset(tot=False, preprocessor='normal'):
                     
                     # apply preprocessor
                     if preprocessor == 'rotate':
-                        rot = rng.randint(0, 360)
+                        rot = rng.randint(-60, 61)
                         img = img.rotate(rot, Image.BILINEAR)
                     elif preprocessor == 'emboss':
                         img = emboss(img)
@@ -137,10 +137,10 @@ def get_dataset(tot=False, preprocessor='normal'):
                         coef = -1 + np.random.rand()*2
                         img = img.transform((28,28), Image.AFFINE, (1,0,0,coef,1,-(coef/2)*28), Image.BILINEAR)
                     elif preprocessor == 'patch':
-                        x1 = np.random.randint(-6, 6)
-                        y1 = np.random.randint(-6, 6)
-                        x2 = np.random.randint(-6, 6)
-                        y2 = np.random.randint(-6, 6)
+                        x1 = np.random.randint(-4, 4)
+                        y1 = np.random.randint(-4, 4)
+                        x2 = np.random.randint(-4, 4)
+                        y2 = np.random.randint(-4, 4)
                         img = img.transform((28,28), Image.EXTENT, (x1, y1, 28+x2, 28+y2), Image.BILINEAR)
                     
                     # convert back to numpy array
@@ -148,7 +148,7 @@ def get_dataset(tot=False, preprocessor='normal'):
                     
                     if preprocessor == 'noisy':
                         # add noise
-                        data.X[ii,:] += np.random.randn(28*28) * 0.25
+                        data.X[ii,:] += np.random.randn(28*28) * 0.1
                         # bound between [0,1]
                         data.X[ii,:] = np.minimum(np.ones(28*28), np.maximum(np.zeros(28*28), data.X[ii,:]))
         

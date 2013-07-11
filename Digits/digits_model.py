@@ -46,7 +46,8 @@ def get_trainer(model, trainset, validset, epochs=20, batch_size=100):
         cost = Dropout(input_include_probs={'h0': 0.8},
                         input_scales={'h0': 1.},
                         default_input_include_prob=0.5, default_input_scale=1./0.5),
-        termination_criterion = MonitorBased(channel_name='y_misclass', prop_decrease=0., N=100),
+        #termination_criterion = MonitorBased(channel_name='y_misclass', prop_decrease=0., N=100),
+        termination_criterion = EpochCounter(epochs),
         update_callbacks = ExponentialDecay(decay_factor=1.00004, min_lr=0.000001)
     )
     return Train(model=model, algorithm=train_algo, dataset=trainset, save_freq=0, save_path='epoch', \
@@ -110,10 +111,11 @@ def get_comb_models(traindata, targets, crossval=True):
 
 if __name__ == '__main__':
     
-    submission = True
+    submission = False
     batch_size = 128
     
-    preprocessors = ('normal', 'rotate', 'noisy', 'hshear', 'vshear', 'patch')
+    #preprocessors = ('normal', 'rotate', 'noisy', 'hshear', 'vshear', 'patch')
+    preprocessors = ('rotate', 'noisy', 'patch')
     
     models = [0]*len(preprocessors)
     accuracies = [0]*len(preprocessors)
@@ -125,7 +127,7 @@ if __name__ == '__main__':
         
         # build and train classifiers for submodels
         models[ii] = get_maxout([28,28,1], batch_size=batch_size)
-        get_trainer(models[ii], trainset, validset, epochs=1000, batch_size=batch_size).main_loop()
+        get_trainer(models[ii], trainset, validset, epochs=40, batch_size=batch_size).main_loop()
         
         outtrainset[ii] = get_output(models[ii],trainset,-1)
         
