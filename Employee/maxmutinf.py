@@ -2,7 +2,6 @@
 """ Maximum Mutual Information Criterion
 """
  
-from sets import Set
 from math import log
  
 class DataPoint(object):
@@ -27,7 +26,7 @@ class DataPoint(object):
         """
         return len(self.vector)
  
-class DataSet(Set):
+class DataSet(set):
     """ A set of data points
     """
     def __init__(self, data):
@@ -36,7 +35,7 @@ class DataSet(Set):
         # have the same dimensionality.
         self.dimension = None
         # Set of all class values.
-        self.categories = Set()
+        self.categories = set()
         # Individual dimension vocabularies.
         self.vocabulary = []
         # Extract data ranges from the data.
