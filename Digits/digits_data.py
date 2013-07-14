@@ -130,25 +130,26 @@ def get_dataset(tot=False, preprocessor='normal'):
                         img = emboss(img)
                     elif preprocessor == 'hshear':
                         # coef = 0 means unsheared
-                        coef = -1 + np.random.rand()*2
+                        coef = -0.5 + np.random.rand()
                         # note: image is moved with (coef/2)*28 to center it after shearing
                         img = img.transform((28,28), Image.AFFINE, (1,coef,-(coef/2)*28,0,1,0), Image.BILINEAR)
                     elif preprocessor == 'vshear':
-                        coef = -1 + np.random.rand()*2
+                        coef = -0.5 + np.random.rand()
                         img = img.transform((28,28), Image.AFFINE, (1,0,0,coef,1,-(coef/2)*28), Image.BILINEAR)
                     elif preprocessor == 'patch':
-                        x1 = np.random.randint(-4, 4)
-                        y1 = np.random.randint(-4, 4)
-                        x2 = np.random.randint(-4, 4)
-                        y2 = np.random.randint(-4, 4)
-                        img = img.transform((28,28), Image.EXTENT, (x1, y1, 28+x2, 28+y2), Image.BILINEAR)
+                        # negative values are not possible in PIL, so do a zoom only transform then
+                        x1 = np.random.randint(0, 5)
+                        y1 = np.random.randint(0, 5)
+                        x2 = np.random.randint(0, 5)
+                        y2 = np.random.randint(0, 5)
+                        img = img.transform((28,28), Image.EXTENT, (x1, y1, 28-x2, 28-y2), Image.BILINEAR)
                     
                     # convert back to numpy array
                     data.X[ii,:] = np.array(img.getdata()) / 255.
                     
                     if preprocessor == 'noisy':
                         # add noise
-                        data.X[ii,:] += np.random.randn(28*28) * 0.1
+                        data.X[ii,:] += np.random.randn(28*28) * 0.05
                         # bound between [0,1]
                         data.X[ii,:] = np.minimum(np.ones(28*28), np.maximum(np.zeros(28*28), data.X[ii,:]))
         

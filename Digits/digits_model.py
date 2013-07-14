@@ -1,20 +1,19 @@
 #!/usr/bin/python
 
-import os
 import numpy as np
 import pandas as pd
 from theano import function
 import Digits.digits_data
 
 from pylearn2.train import Train
-from pylearn2.models.mlp import MLP, ConvRectifiedLinear, Softmax
+from pylearn2.models.mlp import MLP, Softmax
 from pylearn2.models.maxout import MaxoutConvC01B
 from pylearn2.costs.mlp.dropout import Dropout
 from pylearn2.space import Conv2DSpace
 from pylearn2.training_algorithms.sgd import SGD, ExponentialDecay, MomentumAdjustor
 from pylearn2.termination_criteria import EpochCounter, MonitorBased
 from sklearn.metrics.metrics import accuracy_score
-from sklearn import ensemble, cross_validation, linear_model
+from sklearn import cross_validation, linear_model
 
 DATA_DIR = '/home/nico/datasets/Kaggle/Digits/'
 
@@ -51,7 +50,7 @@ def get_trainer(model, trainset, validset, epochs=20, batch_size=100):
         update_callbacks = ExponentialDecay(decay_factor=1.00004, min_lr=0.000001)
     )
     return Train(model=model, algorithm=train_algo, dataset=trainset, save_freq=0, save_path='epoch', \
-            extensions=[MomentumAdjustor(final_momentum=0.7, start=0, saturate=250)])
+            extensions=[MomentumAdjustor(final_momentum=0.7, start=0, saturate=int(0.8*epochs))])
 
 def get_output(model, tdata, layerindex, batch_size=100):
     # get output submodel classifiers
@@ -90,7 +89,7 @@ def get_comb_models(traindata, targets, crossval=True):
     # needs to be not one-hot
     targets = targets.argmax(axis=1)
     
-    models = [linear_model.LogisticRegression(penalty='l2', dual=False, C=1., fit_intercept=False, tol=1e-12)]
+    models = [linear_model.LogisticRegression(penalty='l2', dual=False, C=10., fit_intercept=False, tol=1e-12)]
     
     if crossval:
         # use StratifiedKFold, because survived 0/1 is not evenly distributed
@@ -111,11 +110,10 @@ def get_comb_models(traindata, targets, crossval=True):
 
 if __name__ == '__main__':
     
-    submission = False
+    submission = True
     batch_size = 128
     
-    #preprocessors = ('normal', 'rotate', 'noisy', 'hshear', 'vshear', 'patch')
-    preprocessors = ('rotate', 'noisy', 'patch')
+    preprocessors = ('normal', 'rotate', 'noisy', 'hshear', 'vshear', 'patch')
     
     models = [0]*len(preprocessors)
     accuracies = [0]*len(preprocessors)
@@ -127,7 +125,7 @@ if __name__ == '__main__':
         
         # build and train classifiers for submodels
         models[ii] = get_maxout([28,28,1], batch_size=batch_size)
-        get_trainer(models[ii], trainset, validset, epochs=40, batch_size=batch_size).main_loop()
+        get_trainer(models[ii], trainset, validset, epochs=250, batch_size=batch_size).main_loop()
         
         outtrainset[ii] = get_output(models[ii],trainset,-1)
         
@@ -164,6 +162,6 @@ if __name__ == '__main__':
         simple = np.mean(outtestseta.reshape([28000,len(preprocessors),10]),axis=1)
         simplesubm = np.argmax(simple,axis=1)
         
-        pdsubm = pd.DataFrame({'ImageId': ImageId, 'Label': simplesubm})
+        pdsubm = pd.DataFrame({'ImageId': ImageId, 'Label': subm})
         pdsubm.to_csv(DATA_DIR+'submission.csv', header=True, index=False, fmt='%1.0f')
     
