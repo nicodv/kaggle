@@ -1,10 +1,12 @@
 #!/usr/bin/python
 
+import os
 import numpy as np
 import pandas as pd
 from theano import function
 import Digits.digits_data
 
+from pylearn2.utils import serial
 from pylearn2.train import Train
 from pylearn2.models.mlp import MLP, Softmax
 from pylearn2.models.maxout import MaxoutConvC01B
@@ -45,7 +47,7 @@ def get_trainer(model, trainset, validset, epochs=20, batch_size=100):
         cost = Dropout(input_include_probs={'h0': 0.8},
                         input_scales={'h0': 1.},
                         default_input_include_prob=0.5, default_input_scale=1./0.5),
-        #termination_criterion = MonitorBased(channel_name='y_misclass', prop_decrease=0., N=100),
+        #termination_criterion = MonitorBased(channel_name='y_misclass', prop_decrease=0., N=50),
         termination_criterion = EpochCounter(epochs),
         update_callbacks = ExponentialDecay(decay_factor=1.00004, min_lr=0.000001)
     )
@@ -113,7 +115,8 @@ if __name__ == '__main__':
     submission = True
     batch_size = 128
     
-    preprocessors = ('normal', 'rotate', 'noisy', 'hshear', 'vshear', 'patch')
+    #preprocessors = ('normal', 'rotate', 'noisy', 'hshear', 'vshear', 'patch')
+    preprocessors = ('normal')
     
     models = [0]*len(preprocessors)
     accuracies = [0]*len(preprocessors)
@@ -123,9 +126,12 @@ if __name__ == '__main__':
     for ii, preprocessor in enumerate(preprocessors):
         trainset,validset,testset = Digits.digits_data.get_dataset(tot=submission, preprocessor=preprocessor)
         
-        # build and train classifiers for submodels
-        models[ii] = get_maxout([28,28,1], batch_size=batch_size)
-        get_trainer(models[ii], trainset, validset, epochs=250, batch_size=batch_size).main_loop()
+        if not os.path.exists(DATA_DIR+preprocessor+'_model.pkl'):
+            # build and train classifiers for submodels
+            models[ii] = get_maxout([28,28,1], batch_size=batch_size)
+            get_trainer(models[ii], trainset, validset, epochs=250, batch_size=batch_size).main_loop()
+        else:
+            models[ii] = serial.load(DATA_DIR+preprocessor+'_model.pkl')
         
         outtrainset[ii] = get_output(models[ii],trainset,-1)
         
@@ -135,6 +141,7 @@ if __name__ == '__main__':
             accuracies[ii] = accuracy_score(np.argmax(validset.get_targets(),axis=1),np.argmax(outvalidset[ii],axis=1))
         else:
             outtestset[ii] = get_output(models[ii],testset,-1)
+            serial.save(DATA_DIR+preprocessor+'_model.pkl', models[ii])
     
     if not submission:
         print(accuracies)
