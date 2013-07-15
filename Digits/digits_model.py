@@ -60,7 +60,7 @@ def get_output(model, tdata, layerindex, batch_size=100):
     Yb = model.fprop(Xb, return_all=True)
     
     data = tdata.get_topological_view() #.transpose((3,1,2,0))
-    # fill up with zeroes for dividible by batch number
+    # fill up with zeros to keep dividible by batch number
     extralength = batch_size - data.shape[3]%batch_size
     
     if extralength < batch_size:
@@ -91,7 +91,9 @@ def get_comb_models(traindata, targets, crossval=True):
     # needs to be not one-hot
     targets = targets.argmax(axis=1)
     
-    models = [linear_model.LogisticRegression(penalty='l2', dual=False, C=10., fit_intercept=False, tol=1e-12)]
+    models = [linear_model.LogisticRegression(penalty='l1', dual=False, C=5., fit_intercept=False),
+                linear_model.LogisticRegression(penalty='l2', dual=False, C=10., fit_intercept=False),
+                linear_model.LogisticRegression(penalty='l2', dual=False, C=20., fit_intercept=True)]
     
     if crossval:
         # use StratifiedKFold, because survived 0/1 is not evenly distributed
@@ -115,8 +117,10 @@ if __name__ == '__main__':
     submission = True
     batch_size = 128
     
-    #preprocessors = ('normal', 'rotate', 'noisy', 'hshear', 'vshear', 'patch')
+    #preprocessors = ('normal', 'hshear', 'vshear', 'rotate', 'noisy', 'patch')
+    #epochs = [200, 200, 200, 200, 200, 200]
     preprocessors = ('normal')
+    epochs = [200]
     
     models = [0]*len(preprocessors)
     accuracies = [0]*len(preprocessors)
@@ -129,7 +133,7 @@ if __name__ == '__main__':
         if not os.path.exists(DATA_DIR+preprocessor+'_model.pkl'):
             # build and train classifiers for submodels
             models[ii] = get_maxout([28,28,1], batch_size=batch_size)
-            get_trainer(models[ii], trainset, validset, epochs=250, batch_size=batch_size).main_loop()
+            get_trainer(models[ii], trainset, validset, epochs=epochs[ii], batch_size=batch_size).main_loop()
         else:
             models[ii] = serial.load(DATA_DIR+preprocessor+'_model.pkl')
         
