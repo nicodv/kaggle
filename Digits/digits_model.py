@@ -117,10 +117,11 @@ if __name__ == '__main__':
     submission = True
     batch_size = 128
     
-    #preprocessors = ('normal', 'hshear', 'vshear', 'rotate', 'noisy', 'patch')
-    #epochs = [200, 200, 200, 200, 200, 200]
-    preprocessors = ('normal')
-    epochs = [200]
+    # ---------------------------------------------------------------------------
+    # METHOD 1, combining submodels
+    # ---------------------------------------------------------------------------
+    preprocessors = ('normal', 'hshear', 'vshear', 'rotate', 'noisy', 'patch', 'emboss')
+    epochs = [200, 300, 300, 300, 300, 300, 300]
     
     models = [0]*len(preprocessors)
     accuracies = [0]*len(preprocessors)
@@ -173,6 +174,21 @@ if __name__ == '__main__':
         simple = np.mean(outtestseta.reshape([28000,len(preprocessors),10]),axis=1)
         simplesubm = np.argmax(simple,axis=1)
         
-        pdsubm = pd.DataFrame({'ImageId': ImageId, 'Label': subm})
+        pdsubm = pd.DataFrame({'ImageId': ImageId, 'Label': simplesubm})
         pdsubm.to_csv(DATA_DIR+'submission.csv', header=True, index=False, fmt='%1.0f')
     
+    # ---------------------------------------------------------------------------
+    # METHOD 2, train 1 model with distorted data
+    # ---------------------------------------------------------------------------
+    preprocessors = ('normal', 'hshear', 'vshear', 'rotate', 'noisy', 'patch', 'emboss')
+    
+    trainset,validset,testset = Digits.digits_data.get_all_datasets(tot=submission, preprocessors=preprocessors)
+    
+    # build and train classifiers for submodels
+    model = get_maxout([28,28,1], batch_size=batch_size)
+    get_trainer(model, trainset, validset, epochs=200, batch_size=batch_size).main_loop()
+    
+    output = get_output(model,testset,-1)
+    
+    pdsubm = pd.DataFrame({'ImageId': range(1,28001), 'Label': np.argmax(get_output(models,testset,-1), axis=1)})
+    pdsubm.to_csv(DATA_DIR+'submission.csv', header=True, index=False, fmt='%1.0f')
