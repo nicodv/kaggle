@@ -1,155 +1,194 @@
 #!/usr/bin/env python
-import sys, math, random
-import FileParser
+# kmeans.py using any of the 20-odd metrics in scipy.spatial.distance
+# kmeanssample 2 pass, first sample sqrt(N)
 
-tt_vals = None
+from __future__ import division
+import random
+import numpy as np
+from scipy.spatial.distance import cdist  # $scipy/spatial/distance.py
+    # http://docs.scipy.org/doc/scipy/reference/spatial.html
+from scipy.sparse import issparse  # $scipy/sparse/csr.py
 
-def find_distance(cur_sample, centroid):
-    dist_vals = []
-    for i in range(34):
-        dist_vals_r = []
-        for j in range(7128):
-            d = centroid - cur_sample[i][j]
-            dist_vals_r.append(abs(d))
-        dist_vals.append(dist_vals_r)
-    return dist_vals
+__date__ = "2011-11-17 Nov denis"
+    # X sparse, any cdist metric: real app ?
+    # centres get dense rapidly, metrics in high dim hit distance whiteout
+    # vs unsupervised / semi-supervised svm
 
-def find_centroid(cur_sample):
-    cnt = get_most_commons(cur_sample)
-    centroid = cur_sample[cnt]
-    return centroid
-    
-def get_smallest(data_list):
-    smallest = data_list[0]
-    for val in data_list:
-        if val < smallest:
-            smallest = val
-    return data_list.index(smallest)
-    
-def build_cluster(k_bc, dist_vals_all_bc, tt_vals_bc):
-    clust_bc = []
-    for i in range(k_bc):
-        clust_bc.append([])
-    for i in range(34):
-        for j in range(7128):
-            argm_list = []
-            for k in range(k_bc):
-                argm_list.append(dist_vals_all_bc[k][i][j])
-            
-            smalest_dist_val = get_smallest(argm_list)
-            clust_bc[smalest_dist_val].append([i, j])
-        
-    return clust_bc
-
-def find_distance_for_all(t_random_fn_dist, tt_vals_fn_dist):
-    dist_vals_all_fn = []
-    for cur_k in t_random_fn_dist:
-        cur_dist_vals = find_distance(tt_vals_fn_dist, cur_k)
-        dist_vals_all_fn.append(cur_dist_vals)
-    return dist_vals_all_fn
-
-def reconstruct_clusters(clusters_fn, tt_vals_fn):
-    centriods_list = []
-    k = 0
-    for clust in clusters_fn:
-        if len(clust) > 0:
-            cent_coords = find_centroid(clust)
-            x = cent_coords[0]
-            y = cent_coords[1]
-            centriods_list.append(tt_vals[x][y])
-            k = k + 1
-    #print centriods_list
-    dist_vals_all = find_distance_for_all(centriods_list, tt_vals_fn)
-    clusts = build_cluster(k, dist_vals_all, tt_vals_fn)
-    return clusts, centriods_list
-
-def get_most_commons(mylist):
-    mylist_vals = []
-    for ml in mylist:
-        mylist_vals.append(tt_vals[ml[0]][ml[1]])
-    import sys
-    sys.path.append("D:\python27\lib")
-    import collections
-    x = collections.Counter(mylist_vals)
-    k = x.most_common()
-    m = (0,-99)
-    for j in k:
-        if(j[1]>m[1]):
-            m=j
-    return mylist_vals.index(m[0])
-
-def main(k = 3):
-    global tt_vals
-    print "Started Building clusters... Requested No. of clusters are: ", k
-    tt_obj = FileParser.FileParser("luekemia.csv")
-    tt_vals = tt_obj.parse_file()
-    
-    dist_vals_all = []
-    
-    clusters = []
-    for i in range(k):
-        for j in range(k):
-            clusters.append([])
-    
-    random_i_list = random.sample(xrange(1, 34), k)
-    random_j_list = random.sample(xrange(7128), k)
-    
-    #print random_i_list, random_j_list
-    
-    t_random = []
-    for p in range(k):
-        t_random.append(tt_vals[random_i_list[p]][random_j_list[p]])
-    
-    print "Centroid: ", t_random
-    
-    dist_vals_all = find_distance_for_all(t_random, tt_vals)
-    clusts = build_cluster(k, dist_vals_all, tt_vals)
-    
-    centriods = t_random
-    
-    while True:
-        prev_centriods = centriods
-        clusts, centriods = reconstruct_clusters(clusts, tt_vals)
-        print "Centroid: ", centriods
-        flg = 0
-        for cur_centroid in centriods:
-            if not cur_centroid in prev_centriods:
-                flg = 1
-        if flg == 0:
+#...............................................................................
+def kmodes( X, centres, delta=.001, maxiter=10, metric="euclidean", p=2, verbose=1 ):
+    """ centres, Xtocentre, distances = kmeans( X, initial centres ... )
+    in:
+        X N x dim  may be sparse
+        centres k x dim: initial centres, e.g. random.sample( X, k )
+        delta: relative error, iterate until the average distance to centres
+            is within delta of the previous average distance
+        maxiter
+        metric: any of the 20-odd in scipy.spatial.distance
+            "chebyshev" = max, "cityblock" = L1, "minkowski" with p=
+            or a function( Xvec, centrevec ), e.g. Lqmetric below
+        p: for minkowski metric -- local mod cdist for 0 < p < 1 too
+        verbose: 0 silent, 2 prints running distances
+    out:
+        centres, k x dim
+        Xtocentre: each X -> its nearest centre, ints N -> k
+        distances, N
+    see also: kmeanssample below, class Kmeans below.
+    """
+    if not issparse(X):
+        X = np.asanyarray(X)  # ?
+    centres = centres.todense() if issparse(centres) \
+        else centres.copy()
+    N, dim = X.shape
+    k, cdim = centres.shape
+    if dim != cdim:
+        raise ValueError( "kmeans: X %s and centres %s must have the same number of columns" % (
+            X.shape, centres.shape ))
+    if verbose:
+        print "kmeans: X %s  centres %s  delta=%.2g  maxiter=%d  metric=%s" % (
+            X.shape, centres.shape, delta, maxiter, metric)
+    allx = np.arange(N)
+    prevdist = 0
+    for jiter in range( 1, maxiter+1 ):
+        D = cdist_sparse( X, centres, metric=metric, p=p )  # |X| x |centres|
+        xtoc = D.argmin(axis=1)  # X -> nearest centre
+        distances = D[allx,xtoc]
+        avdist = distances.mean()  # median ?
+        if verbose >= 2:
+            print "kmeans: av |X - nearest centre| = %.4g" % avdist
+        if (1 - delta) * prevdist <= avdist <= prevdist \
+        or jiter == maxiter:
             break
-        
-    print "\n\nFinal Centriods", centriods
-    for i in xrange(k):
-        print "Number of items in Cluster ", i + 1, ": ", len(clusts[i])
-    
-    for i in xrange(k):
-        print "Items in Cluster ", i + 1, ": ", clusts[i][0:4]," ... ", clusts[i][-4:]
-    
-    AML_count_in_clusters = []
-    ALL_count_in_clusters = []
-    
-    for single_cluster in clusts:
-        cur_clust_AML_count = 0
-        cur_clust_ALL_count = 0
-        for coords in single_cluster:
-            if tt_vals[coords[0]][7129] == "AML":
-                cur_clust_AML_count = cur_clust_AML_count + 1
-            else:
-                cur_clust_ALL_count = cur_clust_ALL_count + 1
-        AML_count_in_clusters.append(cur_clust_AML_count)
-        ALL_count_in_clusters.append(cur_clust_ALL_count)
-        
-    FH = open("finalOutPut.csv", "a")
-    
-    for i in range(k):
-        print "\nCluster #: %d" % (i + 1)
-        print "\tAMLs : %d" % (AML_count_in_clusters[i])
-        print "\tALLs : %d" % (ALL_count_in_clusters[i])
-        outputstring = "str(k)," + str(i + 1) + "," + str(AML_count_in_clusters[i]) + "," + str(ALL_count_in_clusters[i]) + "\n"
-        FH.write(outputstring)
-        FH.flush()
-    
-    FH.close()
+        prevdist = avdist
+        for jc in range(k):  # (1 pass in C)
+            c = np.where( xtoc == jc )[0]
+            if len(c) > 0:
+                centres[jc] = X[c].mean( axis=0 )
+    if verbose:
+        print "kmeans: %d iterations  cluster sizes:" % jiter, np.bincount(xtoc)
+    if verbose >= 2:
+        r50 = np.zeros(k)
+        r90 = np.zeros(k)
+        for j in range(k):
+            dist = distances[ xtoc == j ]
+            if len(dist) > 0:
+                r50[j], r90[j] = np.percentile( dist, (50, 90) )
+        print "kmeans: cluster 50 % radius", r50.astype(int)
+        print "kmeans: cluster 90 % radius", r90.astype(int)
+            # scale L1 / dim, L2 / sqrt(dim) ?
+    return centres, xtoc, distances
 
-if __name__ == '__main__':
-    main(int(sys.argv[1]))
+#...............................................................................
+def kmeanssample( X, k, nsample=0, **kwargs ):
+    """ 2-pass kmeans, fast for large N:
+        1) kmeans a random sample of nsample ~ sqrt(N) from X
+        2) full kmeans, starting from those centres
+    """
+        # merge w kmeans ? mttiw
+        # v large N: sample N^1/2, N^1/2 of that
+        # seed like sklearn ?
+    N, dim = X.shape
+    if nsample == 0:
+        nsample = max( 2*np.sqrt(N), 10*k )
+    Xsample = randomsample( X, int(nsample) )
+    pass1centres = randomsample( X, int(k) )
+    samplecentres = kmeans( Xsample, pass1centres, **kwargs )[0]
+    return kmeans( X, samplecentres, **kwargs )
+
+def cdist_sparse( X, Y, **kwargs ):
+    """ -> |X| x |Y| cdist array, any cdist metric
+        X or Y may be sparse -- best csr
+    """
+        # todense row at a time, v slow if both v sparse
+    sxy = 2*issparse(X) + issparse(Y)
+    if sxy == 0:
+        return cdist( X, Y, **kwargs )
+    d = np.empty( (X.shape[0], Y.shape[0]), np.float64 )
+    if sxy == 2:
+        for j, x in enumerate(X):
+            d[j] = cdist( x.todense(), Y, **kwargs ) [0]
+    elif sxy == 1:
+        for k, y in enumerate(Y):
+            d[:,k] = cdist( X, y.todense(), **kwargs ) [0]
+    else:
+        for j, x in enumerate(X):
+            for k, y in enumerate(Y):
+                d[j,k] = cdist( x.todense(), y.todense(), **kwargs ) [0]
+    return d
+
+def randomsample( X, n ):
+    """ random.sample of the rows of X
+        X may be sparse -- best csr
+    """
+    sampleix = random.sample( xrange( X.shape[0] ), int(n) )
+    return X[sampleix]
+
+def nearestcentres( X, centres, metric="euclidean", p=2 ):
+    """ each X -> nearest centre, any metric
+            euclidean2 (~ withinss) is more sensitive to outliers,
+            cityblock (manhattan, L1) less sensitive
+    """
+    D = cdist( X, centres, metric=metric, p=p )  # |X| x |centres|
+    return D.argmin(axis=1)
+
+def Lqmetric( x, y=None, q=.5 ):
+    # yes a metric, may increase weight of near matches; see ...
+    return (np.abs(x - y) ** q) .mean() if y is not None \
+        else (np.abs(x) ** q) .mean()
+
+#...............................................................................
+class Kmeans:
+    """ km = Kmeans( X, k= or centres=, ... )
+        in: either initial centres= for kmeans
+            or k= [nsample=] for kmeanssample
+        out: km.centres, km.Xtocentre, km.distances
+        iterator:
+            for jcentre, J in km:
+                clustercentre = centres[jcentre]
+                J indexes e.g. X[J], classes[J]
+    """
+    def __init__( self, X, k=0, centres=None, nsample=0, **kwargs ):
+        self.X = X
+        if centres is None:
+            self.centres, self.Xtocentre, self.distances = kmeanssample(
+                X, k=k, nsample=nsample, **kwargs )
+        else:
+            self.centres, self.Xtocentre, self.distances = kmeans(
+                X, centres, **kwargs )
+
+    def __iter__(self):
+        for jc in range(len(self.centres)):
+            yield jc, (self.Xtocentre == jc)
+
+#...............................................................................
+if __name__ == "__main__":
+    import random
+    import sys
+    from time import time
+
+    N = 10000
+    dim = 10
+    ncluster = 10
+    kmsample = 100  # 0: random centres, > 0: kmeanssample
+    kmdelta = .001
+    kmiter = 10
+    metric = "cityblock"  # "chebyshev" = max, "cityblock" L1,  Lqmetric
+    seed = 1
+
+    exec( "\n".join( sys.argv[1:] ))  # run this.py N= ...
+    np.set_printoptions( 1, threshold=200, edgeitems=5, suppress=True )
+    np.random.seed(seed)
+    random.seed(seed)
+
+    print "N %d  dim %d  ncluster %d  kmsample %d  metric %s" % (
+        N, dim, ncluster, kmsample, metric)
+    X = np.random.exponential( size=(N,dim) )
+        # cf scikits-learn datasets/
+    t0 = time()
+    if kmsample > 0:
+        centres, xtoc, dist = kmeanssample( X, ncluster, nsample=kmsample,
+            delta=kmdelta, maxiter=kmiter, metric=metric, verbose=2 )
+    else:
+        randomcentres = randomsample( X, ncluster )
+        centres, xtoc, dist = kmeans( X, randomcentres,
+            delta=kmdelta, maxiter=kmiter, metric=metric, verbose=2 )
+    print "%.0f msec" % ((time() - t0) * 1000)
