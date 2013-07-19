@@ -24,9 +24,10 @@ def kmodes(X, centroids, maxiter=10):
         if jiter == maxiter:
             break
         for jc in range(k):
+            # indices of points in current cluster
             c = np.where(xtoc==jc)[0]
             if len(c) > 0:
-                nc = X[c].count_nonzero(axis=0)
+                nq = X[c].count_nonzero(axis=0)
                 nc = X[xtoc].count_nonzero(axis=0)
                 n = len(X)
                 centroids[jc] = ( (nq/n) >= (nc/n) )
@@ -35,13 +36,13 @@ def kmodes(X, centroids, maxiter=10):
         r50 = np.zeros(k)
         r90 = np.zeros(k)
         for j in range(k):
-            dist = distances[ xtoc == j ]
+            dist = Xdistances[xtoc==j]
             if len(dist) > 0:
-                r50[j], r90[j] = np.percentile( dist, (50, 90) )
+                r50[j], r90[j] = np.percentile(dist, (50, 90))
         print "Cluster 50% radius", r50.astype(int)
         print "Cluster 90% radius", r90.astype(int)
             # scale L1 / dim, L2 / sqrt(dim) ?
-    return centroids, xtoc, distances
+    return centroids, xtoc, Xdistances
 
 #...............................................................................
 def kmodesinit( X, k, nsample=0, **kwargs ):
