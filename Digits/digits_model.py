@@ -186,9 +186,9 @@ if __name__ == '__main__':
     
     # build and train classifiers for submodels
     model = get_maxout([28,28,1], batch_size=batch_size)
-    get_trainer(model, trainset, validset, epochs=50, batch_size=batch_size).main_loop()
+    get_trainer(model, trainset, validset, epochs=500, batch_size=batch_size).main_loop()
     
     output = get_output(model,testset,-1)
     
-    pdsubm = pd.DataFrame({'ImageId': range(1,28001), 'Label': np.argmax(get_output(model,testset,-1), axis=1)})
+    pdsubm = pd.DataFrame({'ImageId': range(1,28001), 'Label': np.argmax(output, axis=1)})
     pdsubm.to_csv(DATA_DIR+'submission.csv', header=True, index=False, fmt='%1.0f')
