@@ -197,12 +197,12 @@ def get_all_datasets(tot, preprocessors):
             totvalidset = validset
             tottestset = testset
         else:
-            tottrainset.X = tottrainset.X.append(trainset.X,axis=0)
-            tottrainset.y = tottrainset.y.append(trainset.y,axis=0)
-            totvalidset.X = totvalidset.X.append(validset.X,axis=0)
-            totvalidset.y = totvalidset.y.append(validset.y,axis=0)
-            tottestset.X = tottestset.X.append(testset.X,axis=0)
-            tottestset.y = tottestset.y.append(testset.y,axis=0)
+            tottrainset.X = np.append(tottrainset.X, trainset.X, axis=0)
+            tottrainset.y = np.append(tottrainset.y, trainset.y, axis=0)
+            totvalidset.X = np.append(totvalidset.X, validset.X, axis=0)
+            totvalidset.y = np.append(totvalidset.y, validset.y, axis=0)
+            tottestset.X = np.append(tottestset.X, testset.X, axis=0)
+            tottestset.y = np.append(tottestset.y, testset.y, axis=0)
         
     return tottrainset, totvalidset, tottestset
 

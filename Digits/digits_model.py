@@ -120,63 +120,63 @@ if __name__ == '__main__':
     # ---------------------------------------------------------------------------
     # METHOD 1, combining submodels
     # ---------------------------------------------------------------------------
-    preprocessors = ('normal', 'hshear', 'vshear', 'rotate', 'noisy', 'patch', 'emboss')
-    epochs = [200, 300, 300, 300, 300, 300, 300]
-    
-    models = [0]*len(preprocessors)
-    accuracies = [0]*len(preprocessors)
-    outtrainset = [0]*len(preprocessors)
-    outvalidset = [0]*len(preprocessors)
-    outtestset = [0]*len(preprocessors)
-    for ii, preprocessor in enumerate(preprocessors):
-        trainset,validset,testset = Digits.digits_data.get_dataset(tot=submission, preprocessor=preprocessor)
-        
-        if not os.path.exists(DATA_DIR+preprocessor+'_model.pkl'):
-            # build and train classifiers for submodels
-            models[ii] = get_maxout([28,28,1], batch_size=batch_size)
-            get_trainer(models[ii], trainset, validset, epochs=epochs[ii], batch_size=batch_size).main_loop()
-        else:
-            models[ii] = serial.load(DATA_DIR+preprocessor+'_model.pkl')
-        
-        outtrainset[ii] = get_output(models[ii],trainset,-1)
-        
-        if not submission:
-            # validset is used to evaluate maxout network performance
-            outvalidset[ii] = get_output(models[ii],validset,-1)
-            accuracies[ii] = accuracy_score(np.argmax(validset.get_targets(),axis=1),np.argmax(outvalidset[ii],axis=1))
-        else:
-            outtestset[ii] = get_output(models[ii],testset,-1)
-            serial.save(DATA_DIR+preprocessor+'_model.pkl', models[ii])
-    
-    if not submission:
-        print(accuracies)
-    
-    # now combine maxout predictions in a bunch of classifiers
-    comboutputs = []
-    if not submission:
-        # outtrainset is used to evaluate comb models
-        cmodels = get_comb_models(outtrainset, trainset.y, crossval=True)
-    else:
-        cmodels = get_comb_models(outtrainset, trainset.y, crossval=False)
-        # outtestset: list with NumExamples * NumOutputs(=10) array with length 'no. preprocessors'
-        # reshape to NumExamples * [NumPreprocessors * NumOutputs]
-        outtestseta = np.array(outtestset).transpose((1,0,2))
-        outtestseta = np.reshape(outtestseta,[outtestseta.shape[0],-1])
-        
-        for ii in range(len(cmodels)):
-            comboutputs.append(cmodels[ii].predict_proba(outtestseta))
-        
-        # take mean of classifiers and save output as submission
-        ImageId = range(1,28001)
-        subm = np.argmax(np.mean(comboutputs, axis=0),axis=1)
-        
-        # or just take the mean...
-        simple = np.mean(outtestseta.reshape([28000,len(preprocessors),10]),axis=1)
-        simplesubm = np.argmax(simple,axis=1)
-        
-        pdsubm = pd.DataFrame({'ImageId': ImageId, 'Label': subm})
-        pdsubm.to_csv(DATA_DIR+'submission.csv', header=True, index=False, fmt='%1.0f')
-    
+#    preprocessors = ('normal', 'hshear', 'vshear', 'rotate', 'noisy', 'patch', 'emboss')
+#    epochs = [200, 300, 300, 300, 300, 300, 300]
+#    
+#    models = [0]*len(preprocessors)
+#    accuracies = [0]*len(preprocessors)
+#    outtrainset = [0]*len(preprocessors)
+#    outvalidset = [0]*len(preprocessors)
+#    outtestset = [0]*len(preprocessors)
+#    for ii, preprocessor in enumerate(preprocessors):
+#        trainset,validset,testset = Digits.digits_data.get_dataset(tot=submission, preprocessor=preprocessor)
+#        
+#        if not os.path.exists(DATA_DIR+preprocessor+'_model.pkl'):
+#            # build and train classifiers for submodels
+#            models[ii] = get_maxout([28,28,1], batch_size=batch_size)
+#            get_trainer(models[ii], trainset, validset, epochs=epochs[ii], batch_size=batch_size).main_loop()
+#        else:
+#            models[ii] = serial.load(DATA_DIR+preprocessor+'_model.pkl')
+#        
+#        outtrainset[ii] = get_output(models[ii],trainset,-1)
+#        
+#        if not submission:
+#            # validset is used to evaluate maxout network performance
+#            outvalidset[ii] = get_output(models[ii],validset,-1)
+#            accuracies[ii] = accuracy_score(np.argmax(validset.get_targets(),axis=1),np.argmax(outvalidset[ii],axis=1))
+#        else:
+#            outtestset[ii] = get_output(models[ii],testset,-1)
+#            serial.save(DATA_DIR+preprocessor+'_model.pkl', models[ii])
+#    
+#    if not submission:
+#        print(accuracies)
+#    
+#    # now combine maxout predictions in a bunch of classifiers
+#    comboutputs = []
+#    if not submission:
+#        # outtrainset is used to evaluate comb models
+#        cmodels = get_comb_models(outtrainset, trainset.y, crossval=True)
+#    else:
+#        cmodels = get_comb_models(outtrainset, trainset.y, crossval=False)
+#        # outtestset: list with NumExamples * NumOutputs(=10) array with length 'no. preprocessors'
+#        # reshape to NumExamples * [NumPreprocessors * NumOutputs]
+#        outtestseta = np.array(outtestset).transpose((1,0,2))
+#        outtestseta = np.reshape(outtestseta,[outtestseta.shape[0],-1])
+#        
+#        for ii in range(len(cmodels)):
+#            comboutputs.append(cmodels[ii].predict_proba(outtestseta))
+#        
+#        # take mean of classifiers and save output as submission
+#        ImageId = range(1,28001)
+#        subm = np.argmax(np.mean(comboutputs, axis=0),axis=1)
+#        
+#        # or just take the mean...
+#        simple = np.mean(outtestseta.reshape([28000,len(preprocessors),10]),axis=1)
+#        simplesubm = np.argmax(simple,axis=1)
+#        
+#        pdsubm = pd.DataFrame({'ImageId': ImageId, 'Label': subm})
+#        pdsubm.to_csv(DATA_DIR+'submission.csv', header=True, index=False, fmt='%1.0f')
+#    
     # ---------------------------------------------------------------------------
     # METHOD 2, train 1 model with distorted data
     # ---------------------------------------------------------------------------
@@ -186,9 +186,9 @@ if __name__ == '__main__':
     
     # build and train classifiers for submodels
     model = get_maxout([28,28,1], batch_size=batch_size)
-    get_trainer(model, trainset, validset, epochs=200, batch_size=batch_size).main_loop()
+    get_trainer(model, trainset, validset, epochs=50, batch_size=batch_size).main_loop()
     
     output = get_output(model,testset,-1)
     
-    pdsubm = pd.DataFrame({'ImageId': range(1,28001), 'Label': np.argmax(get_output(models,testset,-1), axis=1)})
+    pdsubm = pd.DataFrame({'ImageId': range(1,28001), 'Label': np.argmax(get_output(model,testset,-1), axis=1)})
     pdsubm.to_csv(DATA_DIR+'submission.csv', header=True, index=False, fmt='%1.0f')
