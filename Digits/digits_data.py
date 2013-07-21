@@ -124,17 +124,17 @@ def get_dataset(tot=False, preprocessor='normal'):
                     
                     # apply preprocessor
                     if preprocessor == 'rotate':
-                        rot = rng.randint(-60, 61)
+                        rot = rng.randint(-40, 41)
                         img = img.rotate(rot, Image.BILINEAR)
                     elif preprocessor == 'emboss':
                         img = emboss(img)
                     elif preprocessor == 'hshear':
                         # coef = 0 means unsheared
-                        coef = -0.5 + np.random.rand()
+                        coef = -1 + np.random.rand()*2
                         # note: image is moved with (coef/2)*28 to center it after shearing
                         img = img.transform((28,28), Image.AFFINE, (1,coef,-(coef/2)*28,0,1,0), Image.BILINEAR)
                     elif preprocessor == 'vshear':
-                        coef = -0.5 + np.random.rand()
+                        coef = -1 + np.random.rand()*2
                         img = img.transform((28,28), Image.AFFINE, (1,0,0,coef,1,-(coef/2)*28), Image.BILINEAR)
                     elif preprocessor == 'patch':
                         # negative values are not possible in PIL, so do a zoom only transform then
@@ -149,7 +149,7 @@ def get_dataset(tot=False, preprocessor='normal'):
                     
                     if preprocessor == 'noisy':
                         # add noise
-                        data.X[ii,:] += np.random.randn(28*28) * 0.05
+                        data.X[ii,:] += np.random.randn(28*28) * 0.1
                         # bound between [0,1]
                         data.X[ii,:] = np.minimum(np.ones(28*28), np.maximum(np.zeros(28*28), data.X[ii,:]))
         
@@ -177,8 +177,8 @@ def get_dataset(tot=False, preprocessor='normal'):
 
 def emboss(img):
     
-    azi = rng.randint(0, 360)
-    ele = rng.randint(0, 60)
+    azi = rng.randint(-40, 41)
+    ele = rng.randint(0, 61)
     dep = 2
     
     # defining azimuth, elevation, and depth

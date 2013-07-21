@@ -117,10 +117,8 @@ if __name__ == '__main__':
     submission = True
     batch_size = 128
     
-    #preprocessors = ('normal', 'hshear', 'vshear', 'rotate', 'noisy', 'patch')
-    #epochs = [200, 200, 200, 200, 200, 200]
-    preprocessors = ('normal')
-    epochs = [200]
+    preprocessors = ('normal', 'hshear', 'vshear', 'rotate', 'noisy', 'patch', 'emboss')
+    epochs = [200, 300, 300, 300, 300, 300, 300]
     
     models = [0]*len(preprocessors)
     accuracies = [0]*len(preprocessors)
@@ -137,15 +135,16 @@ if __name__ == '__main__':
         else:
             models[ii] = serial.load(DATA_DIR+preprocessor+'_model.pkl')
         
-        outtrainset[ii] = get_output(models[ii],trainset,-1)
+        outtrainset[ii] = get_output(models[ii],trainset,-2)
         
         if not submission:
             # validset is used to evaluate maxout network performance
             outvalidset[ii] = get_output(models[ii],validset,-1)
             accuracies[ii] = accuracy_score(np.argmax(validset.get_targets(),axis=1),np.argmax(outvalidset[ii],axis=1))
         else:
-            outtestset[ii] = get_output(models[ii],testset,-1)
-            serial.save(DATA_DIR+preprocessor+'_model.pkl', models[ii])
+            outtestset[ii] = get_output(models[ii],testset,-2)
+            if not os.path.exists(DATA_DIR+preprocessor+'_model.pkl'):
+                serial.save(DATA_DIR+preprocessor+'_model.pkl', models[ii])
     
     if not submission:
         print(accuracies)
@@ -170,8 +169,8 @@ if __name__ == '__main__':
         subm = np.argmax(np.mean(comboutputs, axis=0),axis=1)
         
         # or just take the mean...
-        simple = np.mean(outtestseta.reshape([28000,len(preprocessors),10]),axis=1)
-        simplesubm = np.argmax(simple,axis=1)
+        #simple = np.mean(outtestseta.reshape([28000,len(preprocessors),10]),axis=1)
+        #simplesubm = np.argmax(simple,axis=1)
         
         pdsubm = pd.DataFrame({'ImageId': ImageId, 'Label': subm})
         pdsubm.to_csv(DATA_DIR+'submission.csv', header=True, index=False, fmt='%1.0f')
