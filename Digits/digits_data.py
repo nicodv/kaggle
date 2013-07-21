@@ -175,6 +175,37 @@ def get_dataset(tot=False, preprocessor='normal'):
     else:
         return trainset, validset, testset
 
+def get_all_datasets(tot, preprocessors):
+    
+    for ii, preprocessor in enumerate(preprocessors):
+        
+        train_path = DATA_DIR+'train_'+preprocessor+'_preprocessed.pkl'
+        valid_path = DATA_DIR+'valid_'+preprocessor+'_preprocessed.pkl'
+        tottrain_path = DATA_DIR+'tottrain_'+preprocessor+'_preprocessed.pkl'
+        test_path = DATA_DIR+'test_'+preprocessor+'_preprocessed.pkl'
+        if not os.path.exists(train_path) or not os.path.exists(valid_path) or not os.path.exists(test_path):
+            print('I cannot find something related to preprocessor: ' + preprocessor)
+        else:
+            if tot:
+                trainset = serial.load(tottrain_path)
+            else:
+                trainset = serial.load(train_path)
+            validset = serial.load(valid_path)
+            testset = serial.load(test_path)
+        if ii==0:
+            tottrainset = trainset
+            totvalidset = validset
+            tottestset = testset
+        else:
+            tottrainset.X = tottrainset.X.append(trainset.X,axis=0)
+            tottrainset.y = tottrainset.y.append(trainset.y,axis=0)
+            totvalidset.X = totvalidset.X.append(validset.X,axis=0)
+            totvalidset.y = totvalidset.y.append(validset.y,axis=0)
+            tottestset.X = tottestset.X.append(testset.X,axis=0)
+            tottestset.y = tottestset.y.append(testset.y,axis=0)
+        
+    return tottrainset, totvalidset, tottestset
+
 def emboss(img):
     
     azi = rng.randint(-40, 41)

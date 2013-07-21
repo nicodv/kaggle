@@ -117,6 +117,9 @@ if __name__ == '__main__':
     submission = True
     batch_size = 128
     
+    # ---------------------------------------------------------------------------
+    # METHOD 1, combining submodels
+    # ---------------------------------------------------------------------------
     preprocessors = ('normal', 'hshear', 'vshear', 'rotate', 'noisy', 'patch', 'emboss')
     epochs = [200, 300, 300, 300, 300, 300, 300]
     
@@ -135,16 +138,15 @@ if __name__ == '__main__':
         else:
             models[ii] = serial.load(DATA_DIR+preprocessor+'_model.pkl')
         
-        outtrainset[ii] = get_output(models[ii],trainset,-2)
+        outtrainset[ii] = get_output(models[ii],trainset,-1)
         
         if not submission:
             # validset is used to evaluate maxout network performance
             outvalidset[ii] = get_output(models[ii],validset,-1)
             accuracies[ii] = accuracy_score(np.argmax(validset.get_targets(),axis=1),np.argmax(outvalidset[ii],axis=1))
         else:
-            outtestset[ii] = get_output(models[ii],testset,-2)
-            if not os.path.exists(DATA_DIR+preprocessor+'_model.pkl'):
-                serial.save(DATA_DIR+preprocessor+'_model.pkl', models[ii])
+            outtestset[ii] = get_output(models[ii],testset,-1)
+            serial.save(DATA_DIR+preprocessor+'_model.pkl', models[ii])
     
     if not submission:
         print(accuracies)
@@ -169,9 +171,24 @@ if __name__ == '__main__':
         subm = np.argmax(np.mean(comboutputs, axis=0),axis=1)
         
         # or just take the mean...
-        #simple = np.mean(outtestseta.reshape([28000,len(preprocessors),10]),axis=1)
-        #simplesubm = np.argmax(simple,axis=1)
+        simple = np.mean(outtestseta.reshape([28000,len(preprocessors),10]),axis=1)
+        simplesubm = np.argmax(simple,axis=1)
         
         pdsubm = pd.DataFrame({'ImageId': ImageId, 'Label': subm})
         pdsubm.to_csv(DATA_DIR+'submission.csv', header=True, index=False, fmt='%1.0f')
     
+    # ---------------------------------------------------------------------------
+    # METHOD 2, train 1 model with distorted data
+    # ---------------------------------------------------------------------------
+    preprocessors = ('normal', 'hshear', 'vshear', 'rotate', 'noisy', 'patch', 'emboss')
+    
+    trainset,validset,testset = Digits.digits_data.get_all_datasets(tot=submission, preprocessors=preprocessors)
+    
+    # build and train classifiers for submodels
+    model = get_maxout([28,28,1], batch_size=batch_size)
+    get_trainer(model, trainset, validset, epochs=200, batch_size=batch_size).main_loop()
+    
+    output = get_output(model,testset,-1)
+    
+    pdsubm = pd.DataFrame({'ImageId': range(1,28001), 'Label': np.argmax(get_output(models,testset,-1), axis=1)})
+    pdsubm.to_csv(DATA_DIR+'submission.csv', header=True, index=False, fmt='%1.0f')
