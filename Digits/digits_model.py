@@ -25,11 +25,11 @@ def get_maxout(dim_input, batch_size=100):
         'batch_size': batch_size,
         'input_space': Conv2DSpace(shape=dim_input[:2], num_channels=dim_input[2], axes=['c', 0, 1, 'b']),
         'layers': [
-        MaxoutConvC01B(layer_name='h0', pad=0, num_channels=48, num_pieces=2, kernel_shape=[8, 8],
+        MaxoutConvC01B(layer_name='h0', pad=0, num_channels=72, num_pieces=2, kernel_shape=[8, 8],
                      pool_shape=[4, 4], pool_stride=[2, 2], irange=.005, max_kernel_norm=.9),
-        MaxoutConvC01B(layer_name='h1', pad=3, num_channels=48, num_pieces=2, kernel_shape=[8, 8],
+        MaxoutConvC01B(layer_name='h1', pad=3, num_channels=72, num_pieces=2, kernel_shape=[8, 8],
                      pool_shape=[4, 4], pool_stride=[2, 2], irange=.005, max_kernel_norm=1.9365),
-        MaxoutConvC01B(layer_name='h2', pad=3, num_channels=24, num_pieces=4, kernel_shape=[5, 5],
+        MaxoutConvC01B(layer_name='h2', pad=3, num_channels=48, num_pieces=4, kernel_shape=[5, 5],
                      pool_shape=[2, 2], pool_stride=[2, 2], irange=.005, max_kernel_norm=1.9365),
         Softmax(layer_name='y', max_col_norm=1.9365, n_classes=10, irange=0.005)
         ]
