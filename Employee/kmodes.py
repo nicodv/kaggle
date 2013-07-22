@@ -127,17 +127,18 @@ def clustering_cost(X, clust, Xclust):
 
 if __name__ == "__main__":
     # load soybean disease data
-    X = 
-    y = 
+    X = np.recfromcsv('soybean.csv')
+    y = X[:,-1]
+    X = X[:,:-1]
     
     Xclust, cent = opt_kmodes(X, 4, maxiters=1000)
     
     classtable = sparse.dok_matrix((4,4))
     for ii in len(y):
-        classtable[y[ii],Xclust[ii]] += 1
+        classtable[ii,Xclust[ii]] += 1
     
-    print('            | Clust 1 | Clust 2 | Clust 3 | Clust 4 |')
+    print('    | Clust 1 | Clust 2 | Clust 3 | Clust 4 |')
     print('-----------------------------------------------------')
     for ii in range(4):
-        print('Disease {0}   | {1}      | {2}      | {3}      | {4}      |'.format(ii+1, classtable[ii,:]))
+        print(' {0} |       {1} |       {2} |      {3} |        {4} |'.format(ii+1, classtable[ii,:]))
     
