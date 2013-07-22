@@ -1,164 +1,127 @@
 import numpy as np
 import pandas as pd
-from multiprocessing import Pool
 import itertools
-
-from sklearn import metrics, cross_validation, linear_model, decomposition, preprocessing, cluster
+from sklearn import preprocessing, cross_validation, metrics
+from collections import defaultdict
+from scipy import sparse
 
 DATA_DIR = '/home/nico/datasets/Kaggle/Employee/'
 TRAIN_FILE = DATA_DIR+'train.csv'
 TEST_FILE = DATA_DIR+'test.csv'
-SUBM_FILE = DATA_DIR+'submission.csv'
+CLUST_FILE = DATA_DIR+'clusters.npy'
 
 SEED = 42
 
-def construct_combined_features(data, degree=2):
+def construct_combined_features(data, N=3):
     '''Combine features into a set of new features that express the
-double/triple/etc. combinations of original features.
-'''
-    
+    2nd to Nth degree combinations of original features.
+    '''
     new_data = []
+    sources = []
     _, nfeat = data.shape
-    for indices in itertools.combinations(range(n_feat), degree):
-        new_data.append(data[:,indices])
-    
-    return preprocessing.LabelEncoder().fit_transform(new_data)
+    for degree in range(2,N+1):
+        for indices in itertools.combinations(range(nfeat), degree):
+            new_data.append([hash(tuple(v)) for v in data[:,indices]])
+            sources.append(indices)
+    return np.array(new_data).T, np.array(sources)
 
-def greedy_feature_selection(all_features, training_data):
-    pool = Pool(processes=4)
+def create_submission(predictions, filename):
+    print("Saving submission...")
+    with open(filename, 'w') as f:
+        f.write("id,ACTION\n")
+        for i, pred in enumerate(predictions):
+            f.write("%d,%f\n" % (i + 1, pred))
 
-    best_features = []
-    last_score = 0
-
-    while True:
-        test_feature_sets = [[f] + best_features
-                             for f in all_features
-                             if f not in best_features]
-
-        args = [(feature_set, training_data.ACTION)
-                for feature_set in test_feature_sets]
-
-        scores = pool.map(features_score, args)
-
-        (score, feature_set) = max(zip(scores, test_feature_sets))
-        print feature_set
-        print score
-        if score <= last_score:
-            break
-        last_score = score
-        best_features = feature_set
-
-    pool.close()
-    return best_features
-
-def create_submission(prediction):
-    content = ['id,ACTION']
-    for i, p in enumerate(prediction):
-        content.append('%i,%f' %(i+1,p))
-    f = open(SUBM_FILE, 'w')
-    f.write('\n'.join(content))
-    f.close()
-    print 'Saved submission'
-
-# This loop essentially from Paul Duan's starter code
-def cv_loop(X, y, model, N):
-    
-    # Change the prediction function for LogisticRegression
-    new_predict = lambda M, x: M.predict_proba[:,1]
-    model.predict = new_predict
-    cv = cross_validation.StratifiedShuffleSplit(y, n_iter=N)
-    
-    # replacement for cv_loop
-    scores = cross_validation.cross_val_score(model, X, y, score_func=metrics.auc_score, n_jobs=-1, cv=cv)
-    
-    return no.mean(scores)
-    
+def cv_loop(X, y, model, rseed=SEED, n_iter=5):
+    cv = cross_validation.StratifiedShuffleSplit(y, random_state=rseed, n_iter=n_iter)
+    scores = cross_validation.cross_val_score(model, X, y, scoring='roc_auc', n_jobs=4, cv=cv)
+    return np.mean(scores)
 
 if __name__ == "__main__":
     
-    print "Reading dataset..."
-    train_data = pd.read_csv(TRAIN_FILE)
-    test_data = pd.read_csv(TEST_FILE)
+    N = 5
     
-    # note: last column is duplicate, so dropped here
-    all_data = np.vstack((train_data.ix[:,1:-1], test_data.ix[:,1:-1]))
+    print("Reading data...")
+    trainData = pd.read_csv(TRAIN_FILE)
+    testData = pd.read_csv(TEST_FILE)
+    y = np.array(trainData.ACTION)
     
-    num_train = np.shape(train_data)[0]
+    # last column is duplicate, so dropped here
+    numTrain = np.shape(trainData)[0]
+    allData = np.vstack((trainData.ix[:,1:-1], testData.ix[:,1:-1]))
     
-    # Transform data
-    print "Transforming data..."
-    dp = construct_combined_features(all_data, degree=2)
-    dt = construct_combined_features(all_data, degree=3)
+    print("Transforming data...")
+    combData, sources = construct_combined_features(allData, N=3)
+    allData = np.hstack((allData, combData))
+    numFeatures = allData.shape[1]
     
-    y = np.array(train_data.ACTION)
-    X = all_data[:num_train]
-    X_2 = dp[:num_train]
-    X_3 = dt[:num_train]
-
-    X_test = all_data[num_train:]
-    X_test_2 = dp[num_train:]
-    X_test_3 = dt[num_train:]
-
-    X_train_all = np.hstack((X, X_2, X_3))
-    X_test_all = np.hstack((X_test, X_test_2, X_test_3))
-    num_features = X_train_all.shape[1]
+    print("Dropping rare features...")
+    counts = defaultdict(int)
+    for feat in allData.T:
+        counts[feat] += 1
+    treshold = 5
+    allData = allData[:,counts > treshold]
     
-    model = linear_model.LogisticRegression()
+    if os.path.exist(DATA_DIR+'clusters'):
+        print("Loading clusters...")
+        clusters = np.load(CLUST_FILE)
+    else:
+        print("Starting cluster analysis...")
+        pass
     
+    print("Performing feature selection...")
+    cvModel = ensemble.GradientBoostingClassifier(n_estimators=40, max_depth=5,
+                min_samples_leaf=10, subsample=0.5, max_features=0.25)
+    # replace predict so that we can use AUC in cross-validation
+    cvModel.predict = lambda m, x: m.predict_proba(x)[:,1]
+    
+    print("Performing smart feature selection...")
+    
+    print("Performing greedy feature selection...")
     # Xts holds one hot encodings for each individual feature in memory
-    # speeding up feature selection
-    Xts = [preprocessing.OneHotEncoder(X_train_all[:,[i]])[0] for i in range(num_features)]
-    
-    print "Performing greedy feature selection..."
-    score_hist = []
-    N = 10
-    good_features = set([])
-    # Greedy feature selection loop
-    while len(score_hist) < 2 or score_hist[-1][0] > score_hist[-2][0]:
+    # speeding up feature selection 
+    Xts = [OneHotEncoder(xTrain[:,[i]])[0] for i in range(numFeatures)]
+    scoreHist = []
+    goodFeats = set([])
+    while len(scoreHist) < 2 or scoreHist[-1][0] > scoreHist[-2][0]:
         scores = []
         for f in range(len(Xts)):
-            if f not in good_features:
-                feats = list(good_features) + [f]
+            if f not in goodFeats:
+                feats = list(goodFeats) + [f]
                 Xt = sparse.hstack([Xts[j] for j in feats]).tocsr()
-                score = cv_loop(Xt, y, model, N)
+                score = cv_loop(Xt, y, cvModel, N)
                 scores.append((score, f))
-                print "Feature: %i Mean AUC: %f" % (f, score)
-        good_features.add(max(scores)[1])
-        score_hist.append(max(scores))
-        print "Current features: %s" % sorted(list(good_features))
+                print("Feature: %i Mean AUC: %f" % (f, score))
+        goodFeats.add(max(scores)[1])
+        scoreHist.append(max(scores))
+        print("Current features: %s" % sorted(list(goodFeats)))
+    goodFeats.remove(scoreHist[-1][1])
+    goodFeats = sorted(list(goodFeats))
     
-    # Remove last added feature from good_features
-    good_features.remove(score_hist[-1][1])
-    good_features = sorted(list(good_features))
-    print "Selected features %s" % good_features
-    # good_features= [0, 7, 8, 10, 29, 36, 37, 42, 47, 53, 55, 64, 65, 66, 67, 69, 71, 79, 81, 82]
+    allData = allData[:, goodFeats]
     
-    print "Performing hyperparameter selection..."
-    # Hyperparameter selection loop
-    score_hist = []
-    Xt = sparse.hstack([Xts[j] for j in good_features]).tocsr()
-    Cvals = np.logspace(-4, 4, 20, base=2)
-    for C in Cvals:
-        model.C = C
-        score = cv_loop(Xt, y, model, N)
-        score_hist.append((score,C))
-        print "C: %f Mean AUC: %f" %(C, score)
-    bestC = max(score_hist)[1]
-    model.C = bestC
-    print "Best C value: %f" % (bestC)
+    print("Converting to one-hot...")
+    ohEncoder = preprocessing.OneHotEncoder()
+    ohEncoder.fit(allData)
+    xTrain = encoder.transform(allData[:numTrain])
+    xTest = encoder.transform(allData[numTrain:])
     
-    model.C = 2.5
+    print("Training models...")
+    models = [ensemble.GradientBoostingClassifier(n_estimators=40, max_depth=5,
+                min_samples_leaf=10, subsample=0.5, max_features=0.25),
+            ]
     
-    print "Performing One Hot Encoding on entire dataset..."
-    Xt = np.vstack((X_train_all[:,good_features], X_test_all[:,good_features]))
-    Xt, keymap = preprocessing.OneHotEncoder(Xt)
-    X_train = Xt[:num_train]
-    X_test = Xt[num_train:]
+    cv = cross_validation.StratifiedShuffleSplit(y, random_state=rseed, n_iter=N)
+    scores = [0]*len(models)
+    for ii in range(len(models)):
+        scores[i] = cross_validation.cross_val_score(models[ii], xTrain, y, scoring='roc_auc', n_jobs=4, cv=cv)
+        print("Cross-validation AUC on the training set for model %d:" % ii)
+        print("%0.3f (+/-%0.03f)" % (scores[ii].mean(), scores[ii].std() / 2))
+        
+        models[ii].fit(xTrain, y)
     
-    print "Training full model..."
-    model.fit(X_train, y)
+    print("Making prediction...")
+    preds = model.predict(xTest)
+    create_submission(preds, DATA_DIR+'submission.csv')
     
-    print "Making prediction and saving results..."
-    preds = model.predict_proba(X_test)[:,1]
-    create_submission(preds)
-    
+    print("Done.")
