@@ -2,6 +2,7 @@
 
 '''
 Implementation of the k-modes algorithm by Huang [1997, 1998].
+Uses the initialization scheme suggested in the latter paper.
 
 N.J. de Vos
 '''
@@ -131,7 +132,8 @@ if __name__ == "__main__":
     y = X[:,-1]
     X = X[:,:-1]
     
-    Xclust, cent = opt_kmodes(X, 4, maxiters=1000)
+    useful = (np.std(X, axis=0) > 0)
+    Xclust, cent = opt_kmodes(X[useful], 4, maxiters=1000)
     
     classtable = sparse.dok_matrix((4,4))
     for ii in len(y):
