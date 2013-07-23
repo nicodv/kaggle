@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 import itertools
 from sklearn import preprocessing, cross_validation, ensemble, metrics
-from collections import defaultdict
+from defaultordereddict import DefaultOrderedDict
 from scipy import sparse
 import kmodes
 
@@ -60,11 +60,11 @@ if __name__ == "__main__":
     numFeatures = allData.shape[1]
     
     print("Dropping rare features...")
-    counts = defaultdict(int)
+    counts = DefaultOrderedDict(int)
     for feat in allData.T:
         counts[tuple(feat)] += 1
     treshold = 5
-    allData = allData[:,counts > treshold]
+    allData = allData[:,counts.values() > treshold]
     
     if os.path.exist(DATA_DIR+'clusters'):
         print("Loading clusters...")
