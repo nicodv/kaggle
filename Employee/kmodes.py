@@ -34,15 +34,11 @@ def kmodes(X, k, maxiters):
         # sorted from most to least frequent
         sinds = np.argsort(bc)[::-1]
         freqs.append(zip(inds[sinds], bc[sinds]))
+    # sample centroids using the probabilities of attributes
+    # (I assume that's what's meant in the Huang [1998] paper)
     for ik in range(k):
         for idim in range(dim):
-            rd = np.random.randint(0,k)
-            if rd < len(freqs[idim]):
-                cent[ik, idim] = freqs[idim][rd][0]
-            else:
-                # otherwise sample centroids using the probabilities of attributes
-                # (I assume that's what's meant in the Huang [1998] paper)
-                cent[ik, idim] = weighted_choice(freqs[idim])
+            cent[ik, idim] = weighted_choice(freqs[idim])
     
     # could result in empty clusters, so set centroid to closest point in X
     minInds = []
@@ -100,8 +96,10 @@ def kmodes(X, k, maxiters):
         converged = (moves == 0 and iters > 0)
         print("Iteration: %d, moves: %d" % (iters, moves))
         iters += 1
-        
-    return Xclust, cent
+    
+    cost = clustering_cost(X, cent, Xclust)
+    
+    return Xclust, cent, cost
 
 def opt_kmodes(**kwargs):
     '''Tries to ensure a good clustering result by choosing one that has a
@@ -110,17 +108,18 @@ def opt_kmodes(**kwargs):
     precosts = []
     print("Starting preruns...")
     for ii in range(kwargs['preruns']):
-        Xclust, cent = kmodes(kwargs['X'], kwargs['k'], kwargs['maxiters'])
-        precosts.append(clustering_cost(kwargs['X'], cent, Xclust))
+        Xclust, cent, cost = kmodes(kwargs['X'], kwargs['k'], kwargs['maxiters'])
+        precosts.append(cost)
+        print("Cost = %d" % (cost, ))
     
     while True:
-        Xclust, cent = kmodes(kwargs['X'], kwargs['k'], kwargs['maxiters'])
-        cost = clustering_cost(kwargs['X'], cent, Xclust)
+        Xclust, cent, cost = kmodes(kwargs['X'], kwargs['k'], kwargs['maxiters'])
         if cost <= np.percentile(precosts, kwargs['goodpctl']):
             print("Found a good clustering.")
+            print("Cost = %f" % (cost, ))
             break
     
-    return Xclust, cent
+    return Xclust, cent, cost
 
 def get_distance(A, B):
     # simple matching
@@ -152,8 +151,8 @@ if __name__ == "__main__":
     y = np.genfromtxt('/home/nico/Code/kaggle/Employee/soybean.csv', dtype='unicode', delimiter=',', usecols=35)
     
     useful = (np.std(X, axis=0) > 0.)
-    #Xclust, cent = kmodes(X=X[:,useful], k=4, maxiters=40)
-    Xclust, cent = opt_kmodes(X=X[:,useful], k=4, maxiters=40, preruns=10, goodpctl=20)
+    #Xclust, cent, cost = kmodes(X=X[:,useful], k=4, maxiters=40)
+    Xclust, cent, cost = opt_kmodes(X=X[:,useful], k=4, maxiters=40, preruns=10, goodpctl=20)
     
     classtable = np.zeros((4,4), dtype='int64')
     for ii,_ in enumerate(y):
