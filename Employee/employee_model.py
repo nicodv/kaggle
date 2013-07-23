@@ -4,14 +4,17 @@ import os
 import numpy as np
 import pandas as pd
 import itertools
-from sklearn import preprocessing, cross_validation, ensemble, metrics
+from sklearn import preprocessing, cross_validation, ensemble, linear_model, metrics
 from defaultordereddict import DefaultOrderedDict
 from scipy import sparse
 import kmodes
+from random import Random
+import inspyred
 
 DATA_DIR = '/home/nico/datasets/Kaggle/Employee/'
 TRAIN_FILE = DATA_DIR+'train.csv'
 TEST_FILE = DATA_DIR+'test.csv'
+FEAT_FILE = DATA_DIR+'feats.npy'
 CLUST_FILE = DATA_DIR+'clusters.npy'
 
 def construct_combined_features(data, degree=3):
@@ -34,17 +37,40 @@ def create_submission(predictions, filename):
         for i, pred in enumerate(predictions):
             f.write("%d,%f\n" % (i + 1, pred))
 
-def cv_loop(X, y, model, rseed=42, n_iter=5):
+def cv_loop(X, y, model, rseed=42, n_iter=8):
     cv = cross_validation.StratifiedShuffleSplit(y, random_state=rseed, n_iter=n_iter)
     scores = cross_validation.cross_val_score(model, X, y, scoring='roc_auc', n_jobs=4, cv=cv)
     return np.mean(scores)
 
+# inspyred helper methods
+@diversify
+def generator_feats(random, args):
+    size = args.get('numFeatures')
+    return [random.randint(0,1) for i in range(size)]
+
+def evaluator_feats(candidates, args):
+    X = args.get('X')
+    Xts = args.get('Xts')
+    y = args.get('y')
+    cvModel = args.get('cvModel')
+    cvN = args.get('cvN')
+    fitness = []
+    for cs in candidates:
+        mask = []
+        for comp in cs:
+            mask.append(comp.element[0])
+        Xt = sparse.hstack([Xts[j] for j in mask]).tocsr()
+        fit = cv_loop(Xt, y, cvModel, cvN)
+        fitness.append(fit)
+    return fitness
+
 if __name__ == "__main__":
     
-    rseed = 42
-    featDegree = 3
-    cvN = 5
-    fthresh = 5
+    rseed       = 42
+    featDegree  = 3
+    cvN         = 8
+    fthresh     = 5
+    optAlgo     = 'none'
     
     print("Reading data...")
     trainData = pd.read_csv(TRAIN_FILE)
@@ -72,10 +98,10 @@ if __name__ == "__main__":
     else:
         print("Starting cluster analysis...")
         clusters = []
-        for k in (5, 20, 100, 500):
-            c, _, _ = kmodes.kmodes(allData, k, maxiters=100)
-            clusters.append(c)
-    # add cluster numbers as features
+        for k in (5, 20):
+            cc, _, _ = kmodes.opt_kmodes(allData, k, preruns=10, goodpctl=20, maxiters=100)
+            clusters.append(cc)
+        #np.save(CLUST_FILE, clusters)
     for cc in clusters:
         allData = np.hstack((allData, cc))
     
@@ -85,30 +111,70 @@ if __name__ == "__main__":
     # replace predict so that we can use AUC in cross-validation
     cvModel.predict = lambda m, x: m.predict_proba(x)[:,1]
     
-    print("Performing smart feature selection...")
-    
-    print("Performing greedy feature selection...")
     # Xts holds one hot encodings for each individual feature in memory
     # speeding up feature selection 
     Xts = [preprocessing.OneHotEncoder(allData[:numTrain,[i]])[0] for i in range(numFeatures)]
+    
+    print("Performing smart feature selection...")
+    prng = Random()
+    prng.seed(rseed)
+    if optAlgo == 'GA':
+        ea = inspyred.ec.EvolutionaryComputation(prng)
+        ea.selector = inspyred.ec.selectors.tournament_selection
+        ea.variator = [inspyred.ec.variators.partially_matched_crossover, 
+                       inspyred.ec.variators.inversion_mutation]
+        ea.replacer = inspyred.ec.replacers.generational_replacement
+        ea.terminator = inspyred.ec.terminators.generation_termination
+        final_pop = ac.evolve(generator=generator_feats,
+                              evaluator=evaluator_feats,
+                              bounder = inspyred.ec.DiscreteBounder([0, 1])
+                              maximize=True,
+                              pop_size=10,
+                              max_generations=50,
+                              tournament_size=5,
+                              num_selected=100,
+                              num_elites=1,
+                              numFeatures=numFeatures, X=X, Xts=Xts, y=y, cvModel=cvModel,cvN=cvN
+                              )
+        smartFeats = set(max(ea.population))
+    elif optAlgo == 'PSO':
+        ea = inspyred.swarm.PSO(prng)
+        ea.terminator = inspyred.ec.terminators.evaluation_termination
+        ea.topology = inspyred.swarm.topologies.ring_topology
+        final_pop = ea.evolve(generator=generator_feats,
+                              evaluator=evaluator_feats,
+                              bounder = inspyred.ec.DiscreteBounder([0, 1])
+                              maximize=True,
+                              pop_size=10,
+                              max_generations=50,
+                              max_evaluations=30000,
+                              neighborhood_size=5,
+                              numFeatures=numFeatures, X=X, Xts=Xts, y=y, cvModel=cvModel,cvN=cvN
+                              )
+        smartFeats = set(max(ea.population))
+    else:
+        smartFeats = set([])
+    
+    print("Performing greedy feature selection...")
     scoreHist = []
-    goodFeats = set([])
+    greedFeats = set([])
     while len(scoreHist) < 2 or scoreHist[-1][0] > scoreHist[-2][0]:
         scores = []
         for f in range(len(Xts)):
-            if f not in goodFeats:
-                feats = list(goodFeats) + [f]
+            if f not in greedFeats:
+                feats = list(greedFeats) + [f]
                 Xt = sparse.hstack([Xts[j] for j in feats]).tocsr()
                 score = cv_loop(Xt, y, cvModel, cvN)
                 scores.append((score, f))
                 print("Feature: %i Mean AUC: %f" % (f, score))
-        goodFeats.add(max(scores)[1])
+        greedFeats.add(max(scores)[1])
         scoreHist.append(max(scores))
-        print("Current features: %s" % sorted(list(goodFeats)))
-    goodFeats.remove(scoreHist[-1][1])
-    goodFeats = sorted(list(goodFeats))
+        print("Current features: %s" % sorted(list(greedFeats)))
+    greedFeats.remove(scoreHist[-1][1])
+    bestFeats = greedFeats.update(smartFeats)
+    bestFeats = sorted(list(bestFeats))
     
-    allData = allData[:, goodFeats]
+    allData = allData[:, bestFeats]
     
     print("Converting to one-hot...")
     ohEncoder = preprocessing.OneHotEncoder()
@@ -117,12 +183,14 @@ if __name__ == "__main__":
     xTest = ohEncoder.transform(allData[numTrain:])
     
     print("Training models...")
-    models = [  ensemble.GradientBoostingClassifier(n_estimators=50, max_depth=15,
+    models = [  ensemble.GradientBoostingClassifier(n_estimators=50, max_depth=10,
                 min_samples_leaf=5, subsample=0.5, max_features=0.25),
-                ensemble.GradientBoostingClassifier(n_estimators=100, max_depth=10,
-                min_samples_leaf=10, subsample=0.5, max_features=0.25),
-                ensemble.GradientBoostingClassifier(n_estimators=250, max_depth=5,
-                min_samples_leaf=20, subsample=0.5, max_features=0.25),
+                ensemble.RandomForestClassifier(n_estimators=50, max_depth=10,
+                min_samples_leaf=5, max_features=0.25),
+                linear_model.LogisticRegression(penalty='l1', C=1.0, fit_intercept=True,
+                intercept_scaling=1, class_weight='auto', random_state=rseed),
+                linear_model.LogisticRegression(penalty='l2', C=1.0, fit_intercept=True,
+                intercept_scaling=1, class_weight='auto', random_state=rseed),
             ]
     
     cv = cross_validation.StratifiedShuffleSplit(y, random_state=rseed, n_iter=cvN)
@@ -135,7 +203,7 @@ if __name__ == "__main__":
         models[ii].fit(xTrain, y)
     
     print("Making prediction...")
-    preds = model.predict(xTest)
+    preds = model.predict_proba(xTest)
     create_submission(preds, DATA_DIR+'submission.csv')
     
     print("Done.")
