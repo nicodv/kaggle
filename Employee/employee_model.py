@@ -4,10 +4,11 @@ import os
 import numpy as np
 import pandas as pd
 import itertools
-from sklearn import preprocessing, cross_validation, ensemble, linear_model, metrics
-from defaultordereddict import DefaultOrderedDict
+from sklearn import preprocessing, cross_validation, ensemble, linear_model
 from scipy import sparse
-import kmodes
+from Employee.defaultordereddict import DefaultOrderedDict
+from collections import defaultdict
+from Employee import kmodes
 from random import Random
 import inspyred
 
@@ -43,13 +44,11 @@ def cv_loop(X, y, model, rseed=42, n_iter=8):
     return np.mean(scores)
 
 # inspyred helper methods
-@diversify
 def generator_feats(random, args):
     size = args.get('numFeatures')
     return [random.randint(0,1) for i in range(size)]
 
 def evaluator_feats(candidates, args):
-    X = args.get('X')
     Xts = args.get('Xts')
     y = args.get('y')
     cvModel = args.get('cvModel')
@@ -69,7 +68,7 @@ if __name__ == "__main__":
     rseed       = 42
     featDegree  = 3
     cvN         = 8
-    fthresh     = 5
+    ftresh      = 5
     optAlgo     = 'none'
     
     print("Reading data...")
@@ -82,28 +81,29 @@ if __name__ == "__main__":
     allData = np.vstack((trainData.ix[:,1:-1], testData.ix[:,1:-1]))
     
     print("Transforming data...")
-    combData, sources = construct_combined_features(allData, degree=featDegree)
-    allData = np.hstack((allData, combData))
-    numFeatures = allData.shape[1]
+    #combData, sources = construct_combined_features(allData, degree=featDegree)
+    #allData = np.hstack((allData, combData))
     
-    print("Dropping rare features...")
-    counts = DefaultOrderedDict(int)
-    for feat in allData.T:
-        counts[tuple(feat)] += 1
-    allData = allData[:,counts.values() > ftresh]
-    
-    if os.path.exist(DATA_DIR+'clusters'):
+    if os.path.exists(DATA_DIR+'clusters'):
         print("Loading clusters...")
         clusters = np.load(CLUST_FILE)
     else:
         print("Starting cluster analysis...")
         clusters = []
-        for k in (5, 20):
-            cc, _, _ = kmodes.opt_kmodes(allData, k, preruns=10, goodpctl=20, maxiters=100)
+        for k in (5, ):
+            cc, _, _ = kmodes.opt_kmodes(allData, k, preruns=10, goodpctl=20,
+                                         centUpd='wsampling', maxiters=200)
             clusters.append(cc)
         #np.save(CLUST_FILE, clusters)
     for cc in clusters:
         allData = np.hstack((allData, cc))
+    
+    print("Dropping rare features...")
+    counts = defaultdict(int)
+    for el in allData:
+        counts[tuple(el)] += 1
+    allData = allData[:,counts.values() > ftresh]
+    numFeatures = allData.shape[1]
     
     print("Performing feature selection...")
     cvModel = ensemble.GradientBoostingClassifier(n_estimators=40, max_depth=5,
@@ -113,7 +113,7 @@ if __name__ == "__main__":
     
     # Xts holds one hot encodings for each individual feature in memory
     # speeding up feature selection 
-    Xts = [preprocessing.OneHotEncoder(allData[:numTrain,[i]])[0] for i in range(numFeatures)]
+    Xts = [preprocessing.OneHotEncoder().fit_transform(allData[:numTrain,[i]]) for i in range(numFeatures)]
     
     print("Performing smart feature selection...")
     prng = Random()
@@ -125,16 +125,16 @@ if __name__ == "__main__":
                        inspyred.ec.variators.inversion_mutation]
         ea.replacer = inspyred.ec.replacers.generational_replacement
         ea.terminator = inspyred.ec.terminators.generation_termination
-        final_pop = ac.evolve(generator=generator_feats,
+        final_pop = ea.evolve(generator=generator_feats,
                               evaluator=evaluator_feats,
-                              bounder = inspyred.ec.DiscreteBounder([0, 1])
+                              bounder = inspyred.ec.DiscreteBounder([0, 1]),
                               maximize=True,
                               pop_size=10,
                               max_generations=50,
                               tournament_size=5,
                               num_selected=100,
                               num_elites=1,
-                              numFeatures=numFeatures, X=X, Xts=Xts, y=y, cvModel=cvModel,cvN=cvN
+                              numFeatures=numFeatures, Xts=Xts, y=y, cvModel=cvModel,cvN=cvN
                               )
         smartFeats = set(max(ea.population))
     elif optAlgo == 'PSO':
@@ -143,13 +143,13 @@ if __name__ == "__main__":
         ea.topology = inspyred.swarm.topologies.ring_topology
         final_pop = ea.evolve(generator=generator_feats,
                               evaluator=evaluator_feats,
-                              bounder = inspyred.ec.DiscreteBounder([0, 1])
+                              bounder = inspyred.ec.DiscreteBounder([0, 1]),
                               maximize=True,
                               pop_size=10,
                               max_generations=50,
                               max_evaluations=30000,
                               neighborhood_size=5,
-                              numFeatures=numFeatures, X=X, Xts=Xts, y=y, cvModel=cvModel,cvN=cvN
+                              numFeatures=numFeatures, Xts=Xts, y=y, cvModel=cvModel,cvN=cvN
                               )
         smartFeats = set(max(ea.population))
     else:

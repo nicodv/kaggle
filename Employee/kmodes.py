@@ -9,19 +9,24 @@ __license__ = 'MIT'
 __version__ = '0.1'
 
 
-from scipy import sparse
 import numpy as np
 
-def kmodes(X, k, maxiters=100, verbose=1):
+def kmodes(X, k, centUpd='wsampling', maxiters=100, verbose=1):
     '''k-modes clustering algorithm for categorical data.
     See Huang [1997, 1998] or Chaturvedi et al. [2001].
     
     input:      X = data points (no. attributes * no. points)
                 k = number of clusters
+                centUpd = centroid updating rule
                 maxiters = maximum iterations
     returns:    Xclust = cluster numbers for elements of X
                 cent = centroids
                 cost = clustering cost
+    
+    NOTE: Weighted sampling in the centroid update is more accurate
+    (i.e. generalizes better), but slower to converge. Taking the
+    highest frequency element (which is what Huang does) converges
+    faster, but is often less accurate.
     
     '''
     
@@ -34,21 +39,26 @@ def kmodes(X, k, maxiters=100, verbose=1):
     # ----------------------
     # INIT [see Huang, 1998]
     # ----------------------
+    print("Init: counting elements")
     # determine total frequencies of attributes, necessary for smart init
-    freqs = []
+    freqs = {}
     for idim in range(dim):
-        bc = np.bincount(X[:,idim])
-        inds = np.nonzero(bc)[0]
-        bc = bc[inds]
-        # sorted from most to least frequent
-        sinds = np.argsort(bc)[::-1]
-        freqs.append(zip(inds[sinds], bc[sinds]))
+        for iN in range(N):
+            if freqs.has_key((idim,X[iN,idim])):
+                freqs[(idim,X[iN,idim])] += 1
+            else:
+                freqs[(idim,X[iN,idim])] = 1
+    
+    print("Init: sample centroids")
     # sample centroids using the probabilities of attributes
     # (I assume that's what's meant in the Huang [1998] paper; it seems to work, at least)
     for ik in range(k):
         for idim in range(dim):
-            cent[ik, idim] = weighted_choice(freqs[idim])
+            choices = [x[1] for x in freqs if x[0] == idim]
+            weights = [freqs[(x[0],x[1])] for x in freqs if x[0] == idim]
+            cent[ik, idim] = weighted_choice(zip(choices, weights))
     
+    print("Init: finalizing centroids")
     # the previously chosen centroids could result in empty clusters,
     # so set centroid to closest point in X
     minInds = []
@@ -64,23 +74,28 @@ def kmodes(X, k, maxiters=100, verbose=1):
         minInds.append(minInd)
         cent[ik] = X[minInd]
     
-    # initial assigns to clusters, and recording of initial frequencies of attributes per cluster
-    # (note 1: we don't assume to know how many unique attributes there are for each point (last dimension),
-    # so work with sparse matrix. dok is efficient for incremental filling, like we do here)
-    # (note 2: can't use [...]*k for init, because copies are not allowed for dok)
+    # initial assigns to clusters and count attributes per cluster
+    print("Init: initializing clusters")
     Xclust = np.zeros(N, dtype='int64')
-    freqClust = []
-    for ii in range(k):
-        freqClust.append(sparse.dok_matrix((dim, dim)))
+    freqClust = {}
     for iN in range(N):
-        if iters == 0:
-            Xclust[iN] = cluster
-            for idim in range(dim):
-                freqClust[cluster][idim, X[iN, idim]] += 1
+        minDist = np.inf
+        for ik in range(k):
+            dist = get_distance(X[iN], cent[ik])
+            if dist < minDist:
+                minDist = dist
+                cluster = ik
+        Xclust[iN] = cluster
+        for idim in range(dim):
+            if freqClust.has_key((cluster, idim, X[iN, idim])):
+                freqClust[(cluster, idim, X[iN, idim])] += 1
+            else:
+                freqClust[(cluster, idim, X[iN, idim])] = 1
     
     # ----------------------
     # ITERATION
     # ----------------------
+    print("Starting iterations...")
     iters = 0
     converged = False
     while iters <= maxiters and not converged:
@@ -99,12 +114,24 @@ def kmodes(X, k, maxiters=100, verbose=1):
                 oldcluster = Xclust[iN]
                 for idim in range(dim):
                     # update frequencies of attributes in clusters
-                    freqClust[cluster][idim, X[iN, idim]] += 1
-                    freqClust[oldcluster][idim, X[iN, idim]] -= 1
-                    # update the centroids by choosing the most likely attribute
-                    # TODO: wouldn't weighted sampling also work? it's worth a try
-                    cent[cluster, idim] = np.argmax(freqClust[cluster][idim,:].todense())
-                    cent[oldcluster, idim] = np.argmax(freqClust[oldcluster][idim,:].todense())
+                    if freqClust.has_key((cluster, idim, X[iN, idim])):
+                        freqClust[(cluster, idim, X[iN, idim])] += 1
+                    else:
+                        freqClust[(cluster, idim, X[iN, idim])] = 1
+                    freqClust[(oldcluster, idim, X[iN, idim])] -= 1
+                    # update the centroids by choosing (from) the most likely attribute(s)
+                    ccounts = [freqClust[(x[0],x[1],x[2])] for x in freqClust if x[0] == cluster and x[1] == idim]
+                    cvalues = [x[2] for x in freqClust if x[0] == cluster and x[1] == idim]
+                    if centUpd == 'wsampling':
+                        cent[cluster, idim] = weighted_choice(zip(cvalues, ccounts))
+                    elif centUpd == 'highest':
+                        cent[cluster, idim] = cvalues[np.argmax(ccounts)]
+                    occounts = [freqClust[(x[0],x[1],x[2])] for x in freqClust if x[0] == oldcluster and x[1] == idim]
+                    ocvalues = [x[2] for x in freqClust if x[0] == oldcluster and x[1] == idim]
+                    if centUpd == 'wsampling':
+                        cent[oldcluster, idim] = weighted_choice(zip(ocvalues, occounts))
+                    elif centUpd == 'highest':
+                        cent[oldcluster, idim] = ocvalues[np.argmax(occounts)]
                 Xclust[iN] = cluster
         converged = (moves == 0)
         if verbose:
@@ -124,12 +151,12 @@ def opt_kmodes(X, k, preruns=10, goodpctl=20, **kwargs):
     precosts = []
     print("Starting preruns...")
     for ii in range(preruns):
-        Xclust, cent, cost = kmodes(X, k, kwargs['maxiters'], verbose=0)
+        Xclust, cent, cost = kmodes(X, k, kwargs['centUpd'], kwargs['maxiters'], verbose=1)
         precosts.append(cost)
         print("Cost = {0}".format(cost))
     
     while True:
-        Xclust, cent, cost = kmodes(X, k, kwargs['maxiters'], verbose=1)
+        Xclust, cent, cost = kmodes(X, k, kwargs['centUpd'], kwargs['maxiters'], verbose=1)
         if cost <= np.percentile(precosts, goodpctl):
             print("Found a good clustering.")
             print("Cost = {0}".format(cost))
@@ -176,9 +203,9 @@ if __name__ == "__main__":
     y = np.genfromtxt('/home/nico/Code/kaggle/Employee/soybean.csv', dtype='unicode', delimiter=',', usecols=35)
     
     # drop columns with single value
-    X = X[(np.std(X, axis=0) > 0.)]
+    X = X[:,np.std(X, axis=0) > 0.]
     
-    Xclust, cent, cost = opt_kmodes(X, 4, preruns=10, goodpctl=20, maxiters=40)
+    Xclust, cent, cost = opt_kmodes(X, 4, preruns=10, goodpctl=20, centUpd='wsampling', maxiters=40)
     
     classtable = np.zeros((4,4), dtype='int64')
     for ii,_ in enumerate(y):
@@ -187,6 +214,6 @@ if __name__ == "__main__":
     print("    | Clust 1 | Clust 2 | Clust 3 | Clust 4 |")
     print("----|---------|---------|---------|---------|")
     for ii in range(4):
-        prargs = tuple([ii+1] + classtable[ii,:])
-        print(" D{0} |      {1:>2} |      {2:>2} |      {3:>2} |      {4:>2} |".format(prargs))
+        prargs = tuple([ii+1] + list(classtable[ii,:]))
+        print(" D{0} |      {1:>2} |      {2:>2} |      {3:>2} |      {4:>2} |".format(*prargs))
     
