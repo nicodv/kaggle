@@ -14,8 +14,6 @@ TRAIN_FILE = DATA_DIR+'train.csv'
 TEST_FILE = DATA_DIR+'test.csv'
 CLUST_FILE = DATA_DIR+'clusters.npy'
 
-SEED = 42
-
 def construct_combined_features(data, degree=3):
     '''Combine features into a set of new features that express the
     2nd to nth degree combinations of original features.
@@ -36,14 +34,17 @@ def create_submission(predictions, filename):
         for i, pred in enumerate(predictions):
             f.write("%d,%f\n" % (i + 1, pred))
 
-def cv_loop(X, y, model, rseed=SEED, n_iter=5):
+def cv_loop(X, y, model, rseed=42, n_iter=5):
     cv = cross_validation.StratifiedShuffleSplit(y, random_state=rseed, n_iter=n_iter)
     scores = cross_validation.cross_val_score(model, X, y, scoring='roc_auc', n_jobs=4, cv=cv)
     return np.mean(scores)
 
 if __name__ == "__main__":
     
-    N = 5
+    rseed = 42
+    featDegree = 3
+    cvN = 5
+    fthresh = 5
     
     print("Reading data...")
     trainData = pd.read_csv(TRAIN_FILE)
@@ -55,7 +56,7 @@ if __name__ == "__main__":
     allData = np.vstack((trainData.ix[:,1:-1], testData.ix[:,1:-1]))
     
     print("Transforming data...")
-    combData, sources = construct_combined_features(allData, degree=3)
+    combData, sources = construct_combined_features(allData, degree=featDegree)
     allData = np.hstack((allData, combData))
     numFeatures = allData.shape[1]
     
@@ -63,16 +64,20 @@ if __name__ == "__main__":
     counts = DefaultOrderedDict(int)
     for feat in allData.T:
         counts[tuple(feat)] += 1
-    treshold = 5
-    allData = allData[:,counts.values() > treshold]
+    allData = allData[:,counts.values() > ftresh]
     
     if os.path.exist(DATA_DIR+'clusters'):
         print("Loading clusters...")
         clusters = np.load(CLUST_FILE)
     else:
         print("Starting cluster analysis...")
+        clusters = []
         for k in (5, 20, 100, 500):
-            clusters, _, _ = kmodes.kmodes(allData, k, maxiters=100)
+            c, _, _ = kmodes.kmodes(allData, k, maxiters=100)
+            clusters.append(c)
+    # add cluster numbers as features
+    for cc in clusters:
+        allData = np.hstack((allData, cc))
     
     print("Performing feature selection...")
     cvModel = ensemble.GradientBoostingClassifier(n_estimators=40, max_depth=5,
@@ -94,7 +99,7 @@ if __name__ == "__main__":
             if f not in goodFeats:
                 feats = list(goodFeats) + [f]
                 Xt = sparse.hstack([Xts[j] for j in feats]).tocsr()
-                score = cv_loop(Xt, y, cvModel, N)
+                score = cv_loop(Xt, y, cvModel, cvN)
                 scores.append((score, f))
                 print("Feature: %i Mean AUC: %f" % (f, score))
         goodFeats.add(max(scores)[1])
@@ -112,11 +117,15 @@ if __name__ == "__main__":
     xTest = ohEncoder.transform(allData[numTrain:])
     
     print("Training models...")
-    models = [ensemble.GradientBoostingClassifier(n_estimators=40, max_depth=5,
+    models = [  ensemble.GradientBoostingClassifier(n_estimators=50, max_depth=15,
+                min_samples_leaf=5, subsample=0.5, max_features=0.25),
+                ensemble.GradientBoostingClassifier(n_estimators=100, max_depth=10,
                 min_samples_leaf=10, subsample=0.5, max_features=0.25),
+                ensemble.GradientBoostingClassifier(n_estimators=250, max_depth=5,
+                min_samples_leaf=20, subsample=0.5, max_features=0.25),
             ]
     
-    cv = cross_validation.StratifiedShuffleSplit(y, random_state=SEED, n_iter=N)
+    cv = cross_validation.StratifiedShuffleSplit(y, random_state=rseed, n_iter=cvN)
     scores = [0]*len(models)
     for ii in range(len(models)):
         scores[i] = cross_validation.cross_val_score(models[ii], xTrain, y, scoring='roc_auc', n_jobs=4, cv=cv)
