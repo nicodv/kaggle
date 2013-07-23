@@ -16,15 +16,15 @@ CLUST_FILE = DATA_DIR+'clusters.npy'
 
 SEED = 42
 
-def construct_combined_features(data, N=3):
+def construct_combined_features(data, degree=3):
     '''Combine features into a set of new features that express the
-    2nd to Nth degree combinations of original features.
+    2nd to nth degree combinations of original features.
     '''
     new_data = []
     sources = []
     _, nfeat = data.shape
-    for degree in range(2,N+1):
-        for indices in itertools.combinations(range(nfeat), degree):
+    for ii in range(2,degree+1):
+        for indices in itertools.combinations(range(nfeat), ii):
             new_data.append([hash(tuple(v)) for v in data[:,indices]])
             sources.append(indices)
     return np.array(new_data).T, np.array(sources)
@@ -55,7 +55,7 @@ if __name__ == "__main__":
     allData = np.vstack((trainData.ix[:,1:-1], testData.ix[:,1:-1]))
     
     print("Transforming data...")
-    combData, sources = construct_combined_features(allData, N=3)
+    combData, sources = construct_combined_features(allData, degree=3)
     allData = np.hstack((allData, combData))
     numFeatures = allData.shape[1]
     
@@ -71,7 +71,8 @@ if __name__ == "__main__":
         clusters = np.load(CLUST_FILE)
     else:
         print("Starting cluster analysis...")
-        Xclust, cent = kmodes.kmodes(allData, k=4, maxiters=100)
+        for k in (5, 20, 100, 500):
+            clusters, _, _ = kmodes.kmodes(allData, k, maxiters=100)
     
     print("Performing feature selection...")
     cvModel = ensemble.GradientBoostingClassifier(n_estimators=40, max_depth=5,
