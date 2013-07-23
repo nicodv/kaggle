@@ -34,9 +34,6 @@ def kmodes(X, k, maxiters=100, verbose=1):
     # ----------------------
     # INIT [see Huang, 1998]
     # ----------------------
-    
-    # cluster that points belong to
-    Xclust = np.zeros(N, dtype='int64')
     # determine total frequencies of attributes, necessary for smart init
     freqs = []
     for idim in range(dim):
@@ -71,6 +68,7 @@ def kmodes(X, k, maxiters=100, verbose=1):
     # (note 1: we don't assume to know how many unique attributes there are for each point (last dimension),
     # so work with sparse matrix. dok is efficient for incremental filling, like we do here)
     # (note 2: can't use [...]*k for init, because copies are not allowed for dok)
+    Xclust = np.zeros(N, dtype='int64')
     freqClust = []
     for ii in range(k):
         freqClust.append(sparse.dok_matrix((dim, dim)))
