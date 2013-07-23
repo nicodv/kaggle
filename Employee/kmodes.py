@@ -17,35 +17,45 @@ def kmodes(X, k, maxiters):
     # convert to numpy array, if needed
     X = np.asanyarray(X)
     N, dim = X.shape
-    cent = np.array(k, dim)
+    cent = np.empty((k, dim))
     
     # ----------------------
     # INIT [see Huang, 1998]
     # ----------------------
     
     # cluster that points belong to
-    Xclust = np.zeros(N)
+    Xclust = np.zeros(N, dtype='int64')
     # determine frequencies of attributes, necessary for smart init
-    freqs = [0]*len(dim)
+    freqs = []
     for idim in range(dim):
         bc = np.bincount(X[:,idim])
-        inds = np.nonzero(bc)[0] # delete [0]?
+        inds = np.nonzero(bc)[0]
+        bc = bc[inds]
         # sorted from most to least frequent
-        sinds = np.argsort(inds)[::-1]
-        freqs[idim] = zip(inds[sinds], bc[sinds])
-    # now sample centroids using the probabilities of attributes
-    # (I assume that's what's meant in the Huang [1998] paper)
+        sinds = np.argsort(bc)[::-1]
+        freqs.append(zip(inds[sinds], bc[sinds]))
     for ik in range(k):
         for idim in range(dim):
-            cent[ik, idim] = weighted_choice(freqs[idim])
-        # could result in empty clusters, so set centroid to closest point in X
+            rd = np.random.randint(0,k)
+            if rd < len(freqs[idim]):
+                cent[ik, idim] = freqs[idim][rd][0]
+            else:
+                # otherwise sample centroids using the probabilities of attributes
+                # (I assume that's what's meant in the Huang [1998] paper)
+                cent[ik, idim] = weighted_choice(freqs[idim])
+    
+    # could result in empty clusters, so set centroid to closest point in X
+    minInds = []
+    for ik in range(k):
         minDist = np.inf
         for iN in range(N):
-            dist = get_distance(X[iN], cent[ik])
             # extra check here: we don't want 2 the same centroids
-            if dist < minDist and not (X[iN]==cent[:ik]).any():
-                minDist = dist
-                minInd = iN
+            if iN not in minInds:
+                dist = get_distance(X[iN], cent[ik])
+                if dist < minDist:
+                    minDist = dist
+                    minInd = iN
+        minInds.append(minInd)
         cent[ik] = X[minInd]
     
     # ----------------------
@@ -53,11 +63,14 @@ def kmodes(X, k, maxiters):
     # ----------------------
     # we don't assume to know how many unique attributes there are for each point (last dimension),
     # so work with sparse matrix (dok is efficient for incremental filling, like we do here)
-    freqClust = sparse.dok_matrix((k, dim, dim))
+    # (note: can't use [...]*k, because copies are not allowed for dok)
+    freqClust = []
+    for ii in range(k):
+        freqClust.append(sparse.dok_matrix((dim, dim)))
+    
     iters = 0
     converged = False
     while iters <= maxiters and not converged:
-        iters += 1
         moves = 0
         for iN in range(N):
             minDist = np.inf
@@ -66,39 +79,45 @@ def kmodes(X, k, maxiters):
                 if dist < minDist:
                     minDist = dist
                     cluster = ik
-            # record initial frequencies of attributes in clusters
-            if iter == 1:
+            # assign to cluster and record initial frequencies of attributes
+            if iters == 0:
+                Xclust[iN] = cluster
                 for idim in range(dim):
-                freqClust[cluster, idim, X[iN, idim]] += 1
+                    freqClust[cluster][idim, X[iN, idim]] += 1
             
             # if necessary, move point and update centroids
-            if Xclust[iN] ne cluster:
+            if Xclust[iN] != cluster or iters == 1:
                 moves += 1
                 oldcluster = Xclust[iN]
                 for idim in range(dim):
                     # update frequencies of attributes in clusters
-                    freqClust[cluster, idim, X[iN, idim]] += 1
-                    freqClust[oldcluster, idim, X[iN, idim]] -= 1
+                    freqClust[cluster][idim, X[iN, idim]] += 1
+                    freqClust[oldcluster][idim, X[iN, idim]] -= 1
                     # update the centroids by choosing the most likely attribute
-                    cent[cluster, idim] = np.amax(freqClust[cluster, idim])
-                    cent[oldcluster, idim] = np.amax(freqClust[oldcluster, idim])
-        converged = (moves == 0)
+                    cent[cluster, idim] = np.argmax(freqClust[cluster][idim,:].todense())
+                    cent[oldcluster, idim] = np.argmax(freqClust[oldcluster][idim,:].todense())
+                Xclust[iN] = cluster
+        converged = (moves == 0 and iters > 0)
+        print("Iteration: %d, moves: %d" % (iters, moves))
+        iters += 1
         
     return Xclust, cent
 
-def opt_kmodes(*args, preruns=10, goodpctl=20):
+def opt_kmodes(**kwargs):
     '''Tries to ensure a good clustering result by choosing one that has a
     relatively low clustering cost compared to the costs of a number of pre-runs.
     '''
     precosts = []
-    for ii in range(preruns):
-        Xclust, cent = kmodes(args)
-        precosts.append(clustering_cost(X, cent, Xclust))
+    print("Starting preruns...")
+    for ii in range(kwargs['preruns']):
+        Xclust, cent = kmodes(kwargs['X'], kwargs['k'], kwargs['maxiters'])
+        precosts.append(clustering_cost(kwargs['X'], cent, Xclust))
     
     while True:
-        Xclust, cent = kmodes(args)
-        cost = clustering_cost(X, cent, Xclust)
-        if cost <= np.percentile(ccosts, goodpctl):
+        Xclust, cent = kmodes(kwargs['X'], kwargs['k'], kwargs['maxiters'])
+        cost = clustering_cost(kwargs['X'], cent, Xclust)
+        if cost <= np.percentile(precosts, kwargs['goodpctl']):
+            print("Found a good clustering.")
             break
     
     return Xclust, cent
@@ -116,6 +135,7 @@ def weighted_choice(choices):
             return c
         upto += w
     # shouldn't get this far
+    print(choices)
     assert False
 
 def clustering_cost(X, clust, Xclust):
@@ -128,19 +148,23 @@ def clustering_cost(X, clust, Xclust):
 
 if __name__ == "__main__":
     # load soybean disease data
-    X = np.recfromcsv('soybean.csv')
-    y = X[:,-1]
-    X = X[:,:-1]
+    X = np.genfromtxt('/home/nico/Code/kaggle/Employee/soybean.csv', dtype='int64', delimiter=',')[:,:-1]
+    y = np.genfromtxt('/home/nico/Code/kaggle/Employee/soybean.csv', dtype='unicode', delimiter=',', usecols=35)
     
-    useful = (np.std(X, axis=0) > 0)
-    Xclust, cent = opt_kmodes(X[useful], 4, maxiters=1000)
+    useful = (np.std(X, axis=0) > 0.)
+    #Xclust, cent = kmodes(X=X[:,useful], k=4, maxiters=40)
+    Xclust, cent = opt_kmodes(X=X[:,useful], k=4, maxiters=40, preruns=10, goodpctl=20)
     
-    classtable = sparse.dok_matrix((4,4))
-    for ii in len(y):
-        classtable[ii,Xclust[ii]] += 1
+    classtable = np.zeros((4,4), dtype='int64')
+    for ii,_ in enumerate(y):
+        classtable[int(y[ii][-1])-1,Xclust[ii]] += 1
     
-    print('    | Clust 1 | Clust 2 | Clust 3 | Clust 4 |')
-    print('-----------------------------------------------------')
+    print('     | Clust 1 | Clust 2 | Clust 3 | Clust 4 |')
+    print('----------------------------------------------')
     for ii in range(4):
-        print(' {0} |       {1} |       {2} |      {3} |        {4} |'.format(ii+1, classtable[ii,:]))
+        print(' D{0}  |       {1} |       {2} |       {3} |       {4} |'.format(ii+1, \
+                                                                         classtable[ii,0], \
+                                                                         classtable[ii,1], \
+                                                                         classtable[ii,2], \
+                                                                         classtable[ii,3]))
     

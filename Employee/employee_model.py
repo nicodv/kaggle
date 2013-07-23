@@ -1,9 +1,13 @@
+#!/usr/bin/env python
+
+import os
 import numpy as np
 import pandas as pd
 import itertools
-from sklearn import preprocessing, cross_validation, metrics
+from sklearn import preprocessing, cross_validation, ensemble, metrics
 from collections import defaultdict
 from scipy import sparse
+import kmodes
 
 DATA_DIR = '/home/nico/datasets/Kaggle/Employee/'
 TRAIN_FILE = DATA_DIR+'train.csv'
@@ -58,7 +62,7 @@ if __name__ == "__main__":
     print("Dropping rare features...")
     counts = defaultdict(int)
     for feat in allData.T:
-        counts[feat] += 1
+        counts[tuple(feat)] += 1
     treshold = 5
     allData = allData[:,counts > treshold]
     
@@ -67,7 +71,7 @@ if __name__ == "__main__":
         clusters = np.load(CLUST_FILE)
     else:
         print("Starting cluster analysis...")
-        pass
+        Xclust, cent = kmodes.kmodes(allData, k=4, maxiters=100)
     
     print("Performing feature selection...")
     cvModel = ensemble.GradientBoostingClassifier(n_estimators=40, max_depth=5,
@@ -80,7 +84,7 @@ if __name__ == "__main__":
     print("Performing greedy feature selection...")
     # Xts holds one hot encodings for each individual feature in memory
     # speeding up feature selection 
-    Xts = [OneHotEncoder(xTrain[:,[i]])[0] for i in range(numFeatures)]
+    Xts = [preprocessing.OneHotEncoder(allData[:numTrain,[i]])[0] for i in range(numFeatures)]
     scoreHist = []
     goodFeats = set([])
     while len(scoreHist) < 2 or scoreHist[-1][0] > scoreHist[-2][0]:
@@ -103,15 +107,15 @@ if __name__ == "__main__":
     print("Converting to one-hot...")
     ohEncoder = preprocessing.OneHotEncoder()
     ohEncoder.fit(allData)
-    xTrain = encoder.transform(allData[:numTrain])
-    xTest = encoder.transform(allData[numTrain:])
+    xTrain = ohEncoder.transform(allData[:numTrain])
+    xTest = ohEncoder.transform(allData[numTrain:])
     
     print("Training models...")
     models = [ensemble.GradientBoostingClassifier(n_estimators=40, max_depth=5,
                 min_samples_leaf=10, subsample=0.5, max_features=0.25),
             ]
     
-    cv = cross_validation.StratifiedShuffleSplit(y, random_state=rseed, n_iter=N)
+    cv = cross_validation.StratifiedShuffleSplit(y, random_state=SEED, n_iter=N)
     scores = [0]*len(models)
     for ii in range(len(models)):
         scores[i] = cross_validation.cross_val_score(models[ii], xTrain, y, scoring='roc_auc', n_jobs=4, cv=cv)
