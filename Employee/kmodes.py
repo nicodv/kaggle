@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 '''
-Implementation of the k-modes clustering algorithm by Huang [1997, 1998].
+Implementation of the k-modes clustering algorithm by Huang [1997, 1998] / Chaturvedi et al. [2001].
 '''
 __author__  = 'N.J. de Vos'
 __email__   = 'njdevos@gmail.com'
@@ -14,7 +14,7 @@ import numpy as np
 
 def kmodes(X, k, maxiters=100, verbose=1):
     '''k-modes clustering algorithm for categorical data.
-    Originally by Huang [1997, 1998] and Chaturvedi [2001].
+    See Huang [1997, 1998] or Chaturvedi et al. [2001].
     
     input:      X = data points (no. attributes * no. points)
                 k = number of clusters
