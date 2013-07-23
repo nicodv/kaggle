@@ -2,8 +2,6 @@
 
 '''
 Implementation of the k-modes clustering algorithm by Huang [1997, 1998].
-
-TODO: implement k-prototypes
 '''
 __author__  = 'N.J. de Vos'
 __email__   = 'njdevos@gmail.com'
@@ -106,7 +104,7 @@ def kmodes(X, k, maxiters=100, verbose=1):
                     freqClust[cluster][idim, X[iN, idim]] += 1
                     freqClust[oldcluster][idim, X[iN, idim]] -= 1
                     # update the centroids by choosing the most likely attribute
-                    # TODO: weighted sampling might also work
+                    # TODO: wouldn't weighted sampling also work? it's worth a try
                     cent[cluster, idim] = np.argmax(freqClust[cluster][idim,:].todense())
                     cent[oldcluster, idim] = np.argmax(freqClust[oldcluster][idim,:].todense())
                 Xclust[iN] = cluster
