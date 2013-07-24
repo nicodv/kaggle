@@ -6,7 +6,6 @@ import pandas as pd
 import itertools
 from sklearn import preprocessing, cross_validation, ensemble, linear_model
 from scipy import sparse
-from Employee.defaultordereddict import DefaultOrderedDict
 from collections import defaultdict
 from Employee import kmodes
 from random import Random
@@ -82,8 +81,8 @@ if __name__ == "__main__":
     for feat in allData.T:
         counts = defaultdict(int)
         for el in feat:
-            counts[tuple(el)] += 1
-    allData = allData[:,counts.values() > ftresh]
+            counts[el] += 1
+    allData = allData[:,[x>ftresh for x in counts.values()]]
     
     # create higher-order features
     for fd in range(2, featDegree):
@@ -93,7 +92,7 @@ if __name__ == "__main__":
         # ... and drop their rare values
         counts = defaultdict(int)
         for el in allData:
-            counts[tuple(el)] += 1
+            counts[el] += 1
         allData = allData[:,counts.values() > ftresh]
     
     numFeatures = allData.shape[1]
@@ -105,8 +104,8 @@ if __name__ == "__main__":
         print("Starting cluster analysis...")
         clusters = []
         for k in (5, ):
-            cc, _, _ = kmodes.opt_kmodes(allData, k, preruns=10, goodpctl=20,
-                                         centUpd='wsampling', maxiters=200)
+            cc, _, _ = kmodes.opt_kmodes(allData, k, preRuns=10, goodPctl=20,
+                                         centUpd='wsample', maxIters=200)
             clusters.append(cc)
         #np.save(CLUST_FILE, clusters)
     for cc in clusters:
