@@ -18,18 +18,15 @@ TEST_FILE = DATA_DIR+'test.csv'
 FEAT_FILE = DATA_DIR+'feats.npy'
 CLUST_FILE = DATA_DIR+'clusters.npy'
 
-def construct_combined_features(data, degree=3):
+def construct_combined_features(data, degree=2):
     '''Combine features into a set of new features that express the
-    2nd to nth degree combinations of original features.
+    nth degree combinations of original features.
     '''
     new_data = []
-    sources = []
     _, nfeat = data.shape
-    for ii in range(2,degree+1):
-        for indices in itertools.combinations(range(nfeat), ii):
-            new_data.append([hash(tuple(v)) for v in data[:,indices]])
-            sources.append(indices)
-    return np.array(new_data).T, np.array(sources)
+    for indices in itertools.combinations(range(nfeat), ii):
+        new_data.append([hash(tuple(v)) for v in data[:,indices]])
+    return np.array(new_data).T
 
 def create_submission(predictions, filename):
     print("Saving submission...")
@@ -81,8 +78,25 @@ if __name__ == "__main__":
     allData = np.vstack((trainData.ix[:,1:-1], testData.ix[:,1:-1]))
     
     print("Transforming data...")
-    #combData, sources = construct_combined_features(allData, degree=featDegree)
-    #allData = np.hstack((allData, combData))
+    # drop rare feature values
+    for feat in allData.T:
+        counts = defaultdict(int)
+        for el in feat:
+            counts[tuple(el)] += 1
+    allData = allData[:,counts.values() > ftresh]
+    
+    # create higher-order features
+    for fd in range(2, featDegree):
+        combData = construct_combined_features(allData, degree=fd)
+        allData = np.hstack((allData, combData))
+        
+        # ... and drop their rare values
+        counts = defaultdict(int)
+        for el in allData:
+            counts[tuple(el)] += 1
+        allData = allData[:,counts.values() > ftresh]
+    
+    numFeatures = allData.shape[1]
     
     if os.path.exists(DATA_DIR+'clusters'):
         print("Loading clusters...")
@@ -97,13 +111,6 @@ if __name__ == "__main__":
         #np.save(CLUST_FILE, clusters)
     for cc in clusters:
         allData = np.hstack((allData, cc))
-    
-    print("Dropping rare features...")
-    counts = defaultdict(int)
-    for el in allData:
-        counts[tuple(el)] += 1
-    allData = allData[:,counts.values() > ftresh]
-    numFeatures = allData.shape[1]
     
     print("Performing feature selection...")
     cvModel = ensemble.GradientBoostingClassifier(n_estimators=40, max_depth=5,
