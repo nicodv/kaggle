@@ -1,34 +1,41 @@
 #!/usr/bin/env python
 
 '''
-Implementation of the k-modes clustering algorithm by Huang [1997, 1998] / Chaturvedi et al. [2001].
+Implementation of the k-modes clustering algorithm.
 '''
-__author__  = 'N.J. de Vos'
+__author__  = 'Nico de Vos'
 __email__   = 'njdevos@gmail.com'
 __license__ = 'MIT'
-__version__ = '0.1'
+__version__ = '0.2'
 
 
+import random
 import numpy as np
 
-def kmodes(X, k, centUpd='wsampling', maxiters=100, verbose=1):
+def kmodes(X, k, dissimMeas='simple', centUpd='wsample', maxIters=100, verbose=1):
     '''k-modes clustering algorithm for categorical data.
     See Huang [1997, 1998] or Chaturvedi et al. [2001].
     
-    input:      X = data points (no. attributes * no. points)
-                k = number of clusters
-                centUpd = centroid updating rule
-                maxiters = maximum iterations
-    returns:    Xclust = cluster numbers for elements of X
-                cent = centroids
-                cost = clustering cost
+    input:      X           = data points [no. attributes * no. points]
+                k           = number of clusters
+                dissimMeas  = dissimilarity measure
+                centUpd     = centroid updating rule
+                maxiters    = maximum iterations
+    returns:    Xclust  = cluster numbers for elements of X [no. points]
+                cent    = centroids [k * no. attributes]
+                cost    = clustering cost
     
     NOTE: Weighted sampling in the centroid update is more accurate
     (i.e. generalizes better), but slower to converge. Taking the
-    highest frequency element (which is what Huang does) converges
+    highest frequency element (which is what Huang [1998] does) converges
     faster, but is often less accurate.
+    NOTE: Dissimilarity measure 'weighted' takes into account relative
+    frequencies of attributes (see He et al. [2005] or San et al. [2004]).
     
     '''
+    
+    assert dissimMeas in ('simple','weighted')
+    assert centUpd in ('hifreq', 'wsample')
     
     # convert to numpy array, if needed
     X = np.asanyarray(X)
@@ -39,58 +46,46 @@ def kmodes(X, k, centUpd='wsampling', maxiters=100, verbose=1):
     # ----------------------
     # INIT [see Huang, 1998]
     # ----------------------
-    print("Init: counting elements")
-    # determine total frequencies of attributes, necessary for smart init
-    freqs = {}
+    print("Init: sample initial centroids")
+    # determine frequencies of attributes, necessary for smart init
     for idim in range(dim):
-        for iN in range(N):
-            if freqs.has_key((idim,X[iN,idim])):
-                freqs[(idim,X[iN,idim])] += 1
-            else:
-                freqs[(idim,X[iN,idim])] = 1
-    
-    print("Init: sample centroids")
-    # sample centroids using the probabilities of attributes
-    # (I assume that's what's meant in the Huang [1998] paper; it seems to work, at least)
-    for ik in range(k):
-        for idim in range(dim):
-            choices = [x[1] for x in freqs if x[0] == idim]
-            weights = [freqs[(x[0],x[1])] for x in freqs if x[0] == idim]
-            cent[ik, idim] = weighted_choice(zip(choices, weights))
+        freq = defaultdict(int)
+        for at in X[:,idim]:
+            freq[at] += 1
+        # sample centroids using the probabilities of attributes
+        # (I assume that's what's meant in the Huang [1998] paper; it works, at least)
+        # note: sampling done using population in static list with as many choices as the frequency counts
+        # this works well since (1) we re-use the list k times here, and (2) the counts are small
+        # integers so memory consumption is low
+        choices = [c for c, w in freq for _ in range(w)]
+        for ik in range(k):
+            cent[ik, idim] = random.choice(choices)
     
     print("Init: finalizing centroids")
     # the previously chosen centroids could result in empty clusters,
     # so set centroid to closest point in X
-    minInds = []
+    # TODO: when point is equally close to 2 to k clusters, randomly sample between them
+    # instead of just choosing the first?
     for ik in range(k):
-        minDist = np.inf
-        for iN in range(N):
-            # check this, because we don't want two same centroids
-            if iN not in minInds:
-                dist = get_distance(X[iN], cent[ik])
-                if dist < minDist:
-                    minDist = dist
-                    minInd = iN
-        minInds.append(minInd)
-        cent[ik] = X[minInd]
+        dissim = get_dissim(X, cent[ik], 'simple')
+        ndx = dissim.argsort()
+        # we want the centroid to be unique
+        while X[ndx[0]] in cent:
+            ndx = ndx.delete(0)
+        cent[ik] = X[ndx[0]]
     
     # initial assigns to clusters and count attributes per cluster
     print("Init: initializing clusters")
     Xclust = np.zeros(N, dtype='int64')
-    freqClust = {}
-    for iN in range(N):
-        minDist = np.inf
-        for ik in range(k):
-            dist = get_distance(X[iN], cent[ik])
-            if dist < minDist:
-                minDist = dist
-                cluster = ik
-        Xclust[iN] = cluster
-        for idim in range(dim):
-            if freqClust.has_key((cluster, idim, X[iN, idim])):
-                freqClust[(cluster, idim, X[iN, idim])] += 1
-            else:
-                freqClust[(cluster, idim, X[iN, idim])] = 1
+    clustSize = [0]*k
+    clustFreq = [defaultdict(int)]*k
+    for ii, xx in enumerate(X):
+        dissim = get_dissim(cent, xx, 'simple')
+        cluster = dissim.argsort()[0]
+        clustSize[cluster] += 1
+        Xclust[ii] = cluster
+        for at in xx:
+            clustFreq[cluster][at] += 1
     
     # ----------------------
     # ITERATION
@@ -98,46 +93,44 @@ def kmodes(X, k, centUpd='wsampling', maxiters=100, verbose=1):
     print("Starting iterations...")
     iters = 0
     converged = False
-    while iters <= maxiters and not converged:
+    while iters <= maxIters and not converged:
         iters += 1
         moves = 0
-        for iN in range(N):
-            minDist = np.inf
-            for ik in range(k):
-                dist = get_distance(X[iN], cent[ik])
-                if dist < minDist:
-                    minDist = dist
-                    cluster = ik
-            # if necessary, move point and update centroids
-            if Xclust[iN] != cluster or iters == 1:
+        for ii, xx in X:
+            dissim = get_dissim(cent, xx, dissimMeas, clustSize, clustFreq)
+            cluster = dissim.argsort()[0]
+            # if necessary: move point, and update old/new cluster frequencies and centroids
+            if Xclust[ii] != cluster:
                 moves += 1
-                oldcluster = Xclust[iN]
-                for idim in range(dim):
+                oldcluster = Xclust[ii]
+                clustSize[cluster] += 1
+                clustSize[oldcluster] -= 1
+                assert min(clustSize) > 0 and max(clustSize) < N-k+1
+                for at in xx:
                     # update frequencies of attributes in clusters
-                    if freqClust.has_key((cluster, idim, X[iN, idim])):
-                        freqClust[(cluster, idim, X[iN, idim])] += 1
-                    else:
-                        freqClust[(cluster, idim, X[iN, idim])] = 1
-                    freqClust[(oldcluster, idim, X[iN, idim])] -= 1
-                    # update the centroids by choosing (from) the most likely attribute(s)
-                    ccounts = [freqClust[(x[0],x[1],x[2])] for x in freqClust if x[0] == cluster and x[1] == idim]
-                    cvalues = [x[2] for x in freqClust if x[0] == cluster and x[1] == idim]
-                    if centUpd == 'wsampling':
-                        cent[cluster, idim] = weighted_choice(zip(cvalues, ccounts))
-                    elif centUpd == 'highest':
-                        cent[cluster, idim] = cvalues[np.argmax(ccounts)]
-                    occounts = [freqClust[(x[0],x[1],x[2])] for x in freqClust if x[0] == oldcluster and x[1] == idim]
-                    ocvalues = [x[2] for x in freqClust if x[0] == oldcluster and x[1] == idim]
-                    if centUpd == 'wsampling':
-                        cent[oldcluster, idim] = weighted_choice(zip(ocvalues, occounts))
-                    elif centUpd == 'highest':
-                        cent[oldcluster, idim] = ocvalues[np.argmax(occounts)]
-                Xclust[iN] = cluster
+                    clustFreq[cluster][at] += 1
+                    clustFreq[oldcluster][at] -= 1
+                    assert clustFreq[oldcluster][at] >= 0
+                    # update the new and old centroids by choosing (from) the most likely attribute(s)
+                    for cc in (cluster, oldcluster):
+                        if centUpd == 'hifreq':
+                            cent[cc, idim] = key_for_max_value(clustFreq[cc])
+                        elif centUpd == 'wsample':
+                            # like in the initialization, use the population-in-list method
+                            choices = [c for c, w in clustFreq[cc] for _ in range(w)]
+                            cent[cc, idim] = random.choice(choices)
+                Xclust[ii] = cluster
+                if verbose == 2:
+                    print("Move from cluster {0} to {1}".format(Xclust[ii], cluster))
+        
+        # all points seen in this iteration
         converged = (moves == 0)
         if verbose:
-            print("Iteration: {0}, moves: {1}".format(iters, moves))
+            print("Iteration: {0}/{1}, moves: {2}".format(iters, maxIters, moves))
+            if verbose == 2:
+                print("Cluster sizes: {0}".format(clustSize))
     
-    cost = clustering_cost(X, cent, Xclust)
+    cost = clustering_cost(X, cent, clustSize, clustFreq)
     
     return Xclust, cent, cost
 
@@ -146,53 +139,59 @@ def opt_kmodes(X, k, preruns=10, goodpctl=20, **kwargs):
     by choosing one that has a relatively low clustering cost compared to the
     costs of a number of pre-runs. (Huang [1998] states that clustering cost can be
     used to judge the clustering quality.)
-    
+
     '''
-    precosts = []
+    preCosts = []
     print("Starting preruns...")
-    for ii in range(preruns):
-        Xclust, cent, cost = kmodes(X, k, kwargs['centUpd'], kwargs['maxiters'], verbose=1)
-        precosts.append(cost)
+    for ii in range(preRuns):
+        Xclust, cent, cost = kmodes(X, k, **kwargs, verbose=0)
+        preCosts.append(cost)
         print("Cost = {0}".format(cost))
     
     while True:
-        Xclust, cent, cost = kmodes(X, k, kwargs['centUpd'], kwargs['maxiters'], verbose=1)
-        if cost <= np.percentile(precosts, goodpctl):
+        Xclust, cent, cost = kmodes(X, k, **kwargs, verbose=1)
+        if cost <= np.percentile(preCosts, goodPctl):
             print("Found a good clustering.")
             print("Cost = {0}".format(cost))
             break
     
     return Xclust, cent, cost
 
-def get_distance(A, B):
-    # simple matching
-    dist = (A!=B).sum()
-    return dist
-
-def weighted_choice(choices):
-    '''Given an iterator with (choice, weight) elements, randomly
-    draws a choice with probabilities based on the weights.
+def get_dissim(A, b, dissimMeas, sizes=None, freqs=None):
+    '''Return dissimilarity measure between a number of points A and point b.
     
     '''
-    total = sum(w for c, w in choices)
-    r = np.random.uniform(0, total)
-    upto = 0
-    for c, w in choices:
-        if upto + w > r:
-            return c
-        upto += w
-    assert False, "Shouldn't get this far. Check for zeros?"
+    assert dissimMeas in ('simple', 'weighted')
+    assert (dissimMean == 'weighted') == (sizes and freqs)
+    
+    if dissimMeas == 'simple':
+        return (A != b).sum(axis=1)
+    elif dissimMeas == 'weighted':
+        # unequal:  dissim = 1 (just like simple)
+        # equal:    dissim = 1 - no. of same attributes of points in cluster / number of points in cluster
+        dissim = []
+        for ii, cur in enumerate(A):
+            # values to subtract for equal attributes
+            substr = [freqs[cur][x] / sizes[ii] for x in cur[cur == b]]
+            dissim.append(len(cur) - sum(substr))
+        return np.array(dissim)
 
-def clustering_cost(X, clust, Xclust):
+def key_for_max_value(d):
+    '''Very fast method (supposedly) to get key for maximum value in dict.
+
+    '''
+     v = list(d.values())
+     k = list(d.keys())
+     return k[v.index(max(v))]
+
+def clustering_cost(X, clust, Xclust, **kwargs):
     '''Clustering cost, defined as the sum distance of all points
     to their respective clusters.
-    
+
     '''
     cost = 0
-    for ii in range(X.shape[0]):
-        for jj in range(clust.shape[0]):
-            if Xclust[ii] == jj:
-                cost += get_distance(X[ii], clust[jj])
+    for ii, cc in enumerate(clust):
+        cost += get_dissim(X[Xclust==ii], cc, **kwargs).sum()
     return cost
 
 if __name__ == "__main__":
@@ -205,7 +204,8 @@ if __name__ == "__main__":
     # drop columns with single value
     X = X[:,np.std(X, axis=0) > 0.]
     
-    Xclust, cent, cost = opt_kmodes(X, 4, preruns=10, goodpctl=20, centUpd='wsampling', maxiters=40)
+    Xclust, cent, cost = opt_kmodes(X, 4, preRuns=10, goodPctl=20, dissimMeas='simple',
+                                    centUpd='hifreq', maxIters=40)
     
     classtable = np.zeros((4,4), dtype='int64')
     for ii,_ in enumerate(y):
