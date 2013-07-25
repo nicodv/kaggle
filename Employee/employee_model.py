@@ -8,6 +8,7 @@ from sklearn import preprocessing, cross_validation, ensemble, linear_model
 from scipy import sparse
 from collections import defaultdict
 from Employee import kmodes
+from Employee.selectiveonehotencoder import SelectiveOneHotEncoder
 from random import Random
 import inspyred
 
@@ -62,9 +63,9 @@ def evaluator_feats(candidates, args):
 if __name__ == "__main__":
     
     rseed       = 42
-    featDegree  = 3
-    cvN         = 8
-    ftresh      = 5
+    featDegree  = 2
+    cvN         = 4
+    ftresh      = 10
     optAlgo     = 'none'
     
     print("Reading data...")
@@ -76,27 +77,6 @@ if __name__ == "__main__":
     numTrain = np.shape(trainData)[0]
     allData = np.vstack((trainData.ix[:,1:-1], testData.ix[:,1:-1]))
     
-    print("Transforming data...")
-    # drop rare feature values
-    for feat in allData.T:
-        counts = defaultdict(int)
-        for el in feat:
-            counts[el] += 1
-    allData = allData[:,[x>ftresh for x in counts.values()]]
-    
-    # create higher-order features
-    for fd in range(2, featDegree):
-        combData = construct_combined_features(allData, degree=fd)
-        allData = np.hstack((allData, combData))
-        
-        # ... and drop their rare values
-        counts = defaultdict(int)
-        for el in allData:
-            counts[el] += 1
-        allData = allData[:,counts.values() > ftresh]
-    
-    numFeatures = allData.shape[1]
-    
     if os.path.exists(DATA_DIR+'clusters'):
         print("Loading clusters...")
         clusters = np.load(CLUST_FILE)
@@ -104,12 +84,29 @@ if __name__ == "__main__":
         print("Starting cluster analysis...")
         clusters = []
         for k in (5, ):
-            cc, _, _ = kmodes.opt_kmodes(allData, k, preRuns=10, goodPctl=20,
-                                         centUpd='wsample', maxIters=200)
+            cc, _, _ = kmodes.opt_kmodes(allData, k, preRuns=10, goodPctl=20, init='Cao',
+                                         centUpd='mode', maxIters=200)
             clusters.append(cc)
         #np.save(CLUST_FILE, clusters)
     for cc in clusters:
         allData = np.hstack((allData, cc))
+    
+    print("Combining features...")
+    # create higher-order features
+    if featDegree > 1:
+        for fd in range(2,featDegree+1):
+            combData = construct_combined_features(allData, degree=fd)
+            allData = np.hstack((allData, combData))
+    
+    numFeatures = allData.shape[1]
+    # store indices of rare feature values
+    rare = []
+    for feat in allData.T:
+        counts = defaultdict(int)
+        for el in feat:
+            counts[el] += 1
+        rare.append([x <= ftresh for x in counts.values()])
+    rare = np.array(rare).T
     
     print("Performing feature selection...")
     cvModel = ensemble.GradientBoostingClassifier(n_estimators=40, max_depth=5,
@@ -119,7 +116,7 @@ if __name__ == "__main__":
     
     # Xts holds one hot encodings for each individual feature in memory
     # speeding up feature selection 
-    Xts = [preprocessing.OneHotEncoder().fit_transform(allData[:numTrain,[i]]) for i in range(numFeatures)]
+    Xts = [SelectiveOneHotEncoder().fit_transform(allData[:numTrain,[i]], rare[:numTrain,[i]]) for i in range(numFeatures)]
     
     print("Performing smart feature selection...")
     prng = Random()
@@ -183,10 +180,10 @@ if __name__ == "__main__":
     allData = allData[:, bestFeats]
     
     print("Converting to one-hot...")
-    ohEncoder = preprocessing.OneHotEncoder()
+    ohEncoder = SelectiveOneHotEncoder()
     ohEncoder.fit(allData)
-    xTrain = ohEncoder.transform(allData[:numTrain])
-    xTest = ohEncoder.transform(allData[numTrain:])
+    xTrain = ohEncoder.transform(allData[:numTrain], rare[:numTrain])
+    xTest = ohEncoder.transform(allData[numTrain:], rare[numTrain:])
     
     print("Training models...")
     models = [  ensemble.GradientBoostingClassifier(n_estimators=50, max_depth=10,
