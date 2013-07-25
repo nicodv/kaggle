@@ -13,31 +13,28 @@ import numpy as np
 from collections import defaultdict
 
 
-def kmodes(X, k, centUpd='wsample', maxIters=100, verbose=1):
+def kmodes(X, k, init='Cao', centUpd='mode', maxIters=100, verbose=1):
     '''k-modes clustering algorithm for categorical data.
     See Huang [1997, 1998] or Chaturvedi et al. [2001].
     
     input:      X           = data points [no. attributes * no. points]
                 k           = number of clusters
-                centUpd     = centroid updating method ['hifreq' for most common
-                              attribute or 'wsample' for weighted sampling]
+                init        = initialization method ('Huang' for the one described in
+                              Huang [1998], 'Cao' for the more advanced one in
+                              Cao et al. [2009])
+                centUpd     = centroid updating method ('mode' for most common
+                              attribute or 'wsample' for weighted sampling)
                 maxIters    = maximum no. of iterations
     returns:    Xclust  = cluster numbers for elements of X [no. points]
                 cent    = centroids [k * no. attributes]
                 cost    = clustering cost
     
-    NOTE: Weighted sampling in the centroid update is more accurate
-    (i.e. generalizes better), but slower to converge. Taking the
-    highest frequency element (which is what Huang [1998] does) converges
-    faster, but is often less accurate in my experience.
-    
     '''
-    
-    assert centUpd in ('hifreq', 'wsample')
     
     # convert to numpy array, if needed
     X = np.asanyarray(X)
     N, at = X.shape
+    assert k > 1, "Choose at least 2 clusters."
     assert k < N, "More clusters than data points?"
     cent = np.empty((k, at))
     
@@ -45,30 +42,7 @@ def kmodes(X, k, centUpd='wsample', maxIters=100, verbose=1):
     # INIT [see Huang, 1998]
     # ----------------------
     print("Init: initializing centroids")
-    # determine frequencies of attributes, necessary for smart init
-    for iat in range(at):
-        freq = defaultdict(int)
-        for val in X[:,iat]:
-            freq[val] += 1
-        # sample centroids using the probabilities of attributes
-        # (I assume that's what's meant in the Huang [1998] paper; it works, at least)
-        # note: sampling done using population in static list with as many choices as the frequency counts
-        # this works well since (1) we re-use the list k times here, and (2) the counts are small
-        # integers so memory consumption is low
-        choices = [chc for chc, wght in freq.items() for _ in range(wght)]
-        for ik in range(k):
-            cent[ik, iat] = random.choice(choices)
-    # the previously chosen centroids could result in empty clusters,
-    # so set centroid to closest point in X
-    # TODO: when point is equally close to 2 to k clusters, randomly sample between them
-    # instead of just choosing the first?
-    for ik in range(k):
-        dissim = get_dissim(X, cent[ik])
-        ndx = dissim.argsort()
-        # we want the centroid to be unique
-        while np.all(X[ndx[0]] == cent, axis=1).any():
-            ndx = np.delete(ndx, 0)
-        cent[ik] = X[ndx[0]]
+    cent = init_centroids(X, init)
     
     print("Init: initializing clusters")
     Xclust = np.zeros(N, dtype='int32')
@@ -83,7 +57,7 @@ def kmodes(X, k, centUpd='wsample', maxIters=100, verbose=1):
         # count attribute values per cluster
         for iat, val in enumerate(curx):
             clustFreq[cluster][iat][val] += 1
-    # do initial centroid update
+    # perform an initial centroid update
     for ik in range(k):
         for iat in range(at):
             cent[ik][iat] = update_centroid(clustFreq[ik][iat], centUpd)
@@ -153,8 +127,64 @@ def get_dissim(A, b):
     # simple matching dissimilarity
     return (A != b).sum(axis=1)
 
+def init_centroids(X, init='Cao'):
+    assert init in ('Huang', 'Cao')
+    if init == 'Huang':
+        # determine frequencies of attributes
+        for iat in range(at):
+            freq = defaultdict(int)
+            for val in X[:,iat]:
+                freq[val] += 1
+            # sample centroids using the probabilities of attributes
+            # (I assume that's what's meant in the Huang [1998] paper; it works, at least)
+            # note: sampling done using population in static list with as many choices as the frequency counts
+            # this works well since (1) we re-use the list k times here, and (2) the counts are small
+            # integers so memory consumption is low
+            choices = [chc for chc, wght in freq.items() for _ in range(wght)]
+            for ik in range(k):
+                cent[ik, iat] = random.choice(choices)
+        # the previously chosen centroids could result in empty clusters,
+        # so set centroid to closest point in X
+        for ik in range(k):
+            dissim = get_dissim(X, cent[ik])
+            ndx = dissim.argsort()
+            # we want the centroid to be unique
+            while np.all(X[ndx[0]] == cent, axis=1).any():
+                ndx = np.delete(ndx, 0)
+            cent[ik] = X[ndx[0]]
+    elif init == 'Cao':
+        # determine densities points
+        dens = np.array([])
+        for ix, curx in enumerate(X):
+            densAt = []
+            for iat in range(at):
+                freq = defaultdict(int)
+                for val in X[:,iat]:
+                    freq[val] += 1
+                densAt.append(freq[curx[iat]] / float(len(curx)))
+            dens[ix] = np.mean(densAt)
+        
+        # choose centroids based on distance and density
+        cent[0] = X[np.argmax(dens)]
+        dissim = get_dissim(X, cent[0], dissimMeas)
+        cent[1] = X[np.argmax(dissim * dens)]
+        # for the reamining centroids, choose max dens * dissim to the (already assigned)
+        # centroid with the lowest dens * dissim
+        for ic in range(2,k):
+            dd = np.empty((ic, N))
+            for icp in range(ic):
+                dd[icp] = get_dissim(X, cent[icp], dissimMeas) * dens
+            cent[ic] = X[np.argmax(dd[np.argmin(dd, axis=0)])]
+    
+    return cent
+
 def update_centroid(freqs, centUpd):
-    if centUpd == 'hifreq':
+    # TODO: Taking the mode (i.e. highest frequency element), which is what Huang [1998]
+    # suggests, converges faster and takes less processing power. However, weighted sampling
+    # in the centroid update makes intuitive sense to me and might offer better
+    # generalization. Investigate.
+    assert centUpd in ('mode', 'wsample')
+    if centUpd == 'mode':
         return key_for_max_value(freqs)
     elif centUpd == 'wsample':
         choices = [chc for chc, wght in freqs.items() for _ in range(wght)]
@@ -188,7 +218,8 @@ if __name__ == "__main__":
     # drop columns with single value
     X = X[:,np.std(X, axis=0) > 0.]
     
-    Xclust, cent, cost = opt_kmodes(X, 4, preRuns=10, goodPctl=20, centUpd='hifreq', maxIters=40)
+    #Xclust, cent, cost = kmodes(X, 4, init='Huang', centUpd='mode', maxIters=40)
+    Xclust, cent, cost = opt_kmodes(X, 4, preRuns=10, goodPctl=20, init='Huang', centUpd='mode', maxIters=40)
     
     classtable = np.zeros((4,4), dtype='int64')
     for ii,_ in enumerate(y):
