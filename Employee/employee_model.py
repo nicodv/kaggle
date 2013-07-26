@@ -4,7 +4,7 @@ import os
 import numpy as np
 import pandas as pd
 import itertools
-from sklearn import preprocessing, cross_validation, ensemble, linear_model
+from sklearn import cross_validation, ensemble, linear_model
 from scipy import sparse
 from collections import defaultdict
 from Employee import kmodes
@@ -24,7 +24,7 @@ def construct_combined_features(data, degree=2):
     '''
     new_data = []
     _, nfeat = data.shape
-    for indices in itertools.combinations(range(nfeat), ii):
+    for indices in itertools.combinations(range(nfeat), degree):
         new_data.append([hash(tuple(v)) for v in data[:,indices]])
     return np.array(new_data).T
 
@@ -77,19 +77,20 @@ if __name__ == "__main__":
     numTrain = np.shape(trainData)[0]
     allData = np.vstack((trainData.ix[:,1:-1], testData.ix[:,1:-1]))
     
-    if os.path.exists(DATA_DIR+'clusters'):
+    if os.path.exists(CLUST_FILE):
         print("Loading clusters...")
         clusters = np.load(CLUST_FILE)
     else:
         print("Starting cluster analysis...")
         clusters = []
-        for k in (5, ):
-            cc, _, _ = kmodes.opt_kmodes(allData, k, preRuns=10, goodPctl=20, init='Cao',
-                                         centUpd='mode', maxIters=200)
+        for k in (10, 30, 100, 300, 1000):
+            #cc, _, _ = kmodes.opt_kmodes(allData, k, init='Cao', preRuns=10, goodPctl=20,
+                                         #centUpd='wsample', maxIters=200)
+            cc, _, _ = kmodes.kmodes(allData, k, init='Cao', centUpd='mode', maxIters=100)
             clusters.append(cc)
-        #np.save(CLUST_FILE, clusters)
+        np.save(CLUST_FILE, clusters)
     for cc in clusters:
-        allData = np.hstack((allData, cc))
+        allData = np.hstack((allData, np.expand_dims(cc,1)))
     
     print("Combining features...")
     # create higher-order features
@@ -100,13 +101,13 @@ if __name__ == "__main__":
     
     numFeatures = allData.shape[1]
     # store indices of rare feature values
-    rare = []
-    for feat in allData.T:
+    rare = np.empty((allData.shape[1], allData.shape[0]), dtype='bool')
+    for ii, feat in enumerate(allData.T):
         counts = defaultdict(int)
         for el in feat:
             counts[el] += 1
-        rare.append([x <= ftresh for x in counts.values()])
-    rare = np.array(rare).T
+        rare[ii] = [counts[x] <= ftresh for x in feat]
+    rare = rare.T
     
     print("Performing feature selection...")
     cvModel = ensemble.GradientBoostingClassifier(n_estimators=40, max_depth=5,

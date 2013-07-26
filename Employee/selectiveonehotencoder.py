@@ -1,56 +1,21 @@
-import warnings
 import numbers
-import math
 
 import numpy as np
-import numpy.ma as ma
-from scipy import sparse
-from scipy import stats
+import scipy.sparse as sp
 
-from .base import BaseEstimator, TransformerMixin
-from .utils import check_arrays
-from .utils import array2d
-from .utils import as_float_array
-from .utils import atleast2d_or_csr
-from .utils import atleast2d_or_csc
-from .utils import safe_asarray
-from .utils import warn_if_not_float
-from .utils.fixes import unique
-from .utils import deprecated
-
-from .utils.multiclass import unique_labels
-from .utils.multiclass import type_of_target
-
-from .utils.sparsefuncs import inplace_csr_row_normalize_l1
-from .utils.sparsefuncs import inplace_csr_row_normalize_l2
-from .utils.sparsefuncs import inplace_csr_column_scale
-from .utils.sparsefuncs import mean_variance_axis0
-from .externals import six
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.utils import check_arrays
 
 class SelectiveOneHotEncoder(BaseEstimator, TransformerMixin):
-    def __init__(self, n_values="auto", categorical_features="all",
-                 dtype=np.float):
+    def __init__(self, n_values="auto", dtype=np.float):
         self.n_values = n_values
-        self.categorical_features = categorical_features
         self.dtype = dtype
 
-    def fit(self, X, y=None):
-        """Fit OneHotEncoder to X.
-
-Parameters
-----------
-X : array-like, shape=(n_samples, n_feature)
-Input array of type int.
-
-Returns
--------
-self
-"""
+    def fit(self, X, y=None, rare=None):
         self.fit_transform(X)
         return self
 
-    def _fit_transform(self, X):
-        """Assumes X contains only categorical features."""
+    def fit_transform(self, X, y=None, rare=None):
         X = check_arrays(X, sparse_format='dense', dtype=np.int)[0]
         if np.any(X < 0):
             raise ValueError("X needs to contain only non-negative integers.")
@@ -74,34 +39,24 @@ self
         n_values = np.hstack([[0], n_values])
         indices = np.cumsum(n_values)
         self.feature_indices_ = indices
-
+        
         column_indices = (X + indices[:-1]).ravel()
         row_indices = np.repeat(np.arange(n_samples, dtype=np.int32),
                                 n_features)
         data = np.ones(n_samples * n_features)
-        out = sparse.coo_matrix((data, (row_indices, column_indices)),
-                                shape=(n_samples, indices[-1]),
-                                dtype=self.dtype).tocsr()
+        out = sp.coo_matrix((data, (row_indices, column_indices)),
+                            shape=(n_samples, indices[-1]),
+                            dtype=self.dtype).tocsr()
 
         if self.n_values == 'auto':
             mask = np.array(out.sum(axis=0)).ravel() != 0
             active_features = np.where(mask)[0]
             out = out[:, active_features]
             self.active_features_ = active_features
-
+        
         return out
 
-    def fit_transform(self, X, y=None):
-        """Fit OneHotEncoder to X, then transform X.
-
-Equivalent to self.fit(X).transform(X), but more convenient and more
-efficient. See fit for the parameters, transform for the return value.
-"""
-        return _transform_selected(X, self._fit_transform,
-                                   self.categorical_features, copy=True)
-
-    def _transform(self, X):
-        """Asssumes X contains only categorical features."""
+    def transform(self, X, rare=None):
         X = check_arrays(X, sparse_format='dense', dtype=np.int)[0]
         if np.any(X < 0):
             raise ValueError("X needs to contain only non-negative integers.")
@@ -121,26 +76,9 @@ efficient. See fit for the parameters, transform for the return value.
         row_indices = np.repeat(np.arange(n_samples, dtype=np.int32),
                                 n_features)
         data = np.ones(n_samples * n_features)
-        out = sparse.coo_matrix((data, (row_indices, column_indices)),
-                                shape=(n_samples, indices[-1]),
-                                dtype=self.dtype).tocsr()
+        out = sp.coo_matrix((data, (row_indices, column_indices)),
+                            shape=(n_samples, indices[-1]),
+                            dtype=self.dtype).tocsr()
         if self.n_values == 'auto':
             out = out[:, self.active_features_]
         return out
-
-    def transform(self, X):
-        """Transform X using one-hot encoding.
-
-Parameters
-----------
-X : array-like, shape=(n_samples, n_features)
-Input array of type int.
-
-Returns
--------
-X_out : sparse matrix, dtype=int
-Transformed input.
-"""
-        return _transform_selected(X, self._transform,
-                                   self.categorical_features, copy=True)
-

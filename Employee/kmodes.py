@@ -36,19 +36,18 @@ def kmodes(X, k, init='Cao', centUpd='mode', maxIters=100, verbose=1):
     N, at = X.shape
     assert k > 1, "Choose at least 2 clusters."
     assert k < N, "More clusters than data points?"
-    cent = np.empty((k, at))
     
     # ----------------------
     # INIT [see Huang, 1998]
     # ----------------------
     print("Init: initializing centroids")
-    cent = init_centroids(X, init)
+    cent = init_centroids(X, k, init)
     
     print("Init: initializing clusters")
     Xclust = np.zeros(N, dtype='int32')
     # clustFreq is a list of lists with dictionaries that contain the
     # frequencies of values per cluster and attribute
-    clustFreq = [[defaultdict(int) for _ in range(atts)] for _ in range(k)]
+    clustFreq = [[defaultdict(int) for _ in range(at)] for _ in range(k)]
     for ix, curx in enumerate(X):
         # initial assigns to clusters
         dissim = get_dissim(cent, curx)
@@ -99,36 +98,10 @@ def kmodes(X, k, init='Cao', centUpd='mode', maxIters=100, verbose=1):
     
     return Xclust, cent, cost
 
-def opt_kmodes(X, k, preRuns=10, goodPctl=20, **kwargs):
-    '''Shell around k-modes algorithm that tries to ensure a good clustering result
-    by choosing one that has a relatively low clustering cost compared to the
-    costs of a number of pre-runs. (Huang [1998] states that clustering cost can be
-    used to judge the clustering quality.)
-
-    '''
-    preCosts = []
-    print("Starting preruns...")
-    for _ in range(preRuns):
-        Xclust, cent, cost = kmodes(X, k, verbose=1, **kwargs)
-        preCosts.append(cost)
-        print("Cost = {0}".format(cost))
-    
-    while True:
-        Xclust, cent, cost = kmodes(X, k, verbose=2, **kwargs)
-        if cost <= np.percentile(preCosts, goodPctl):
-            print("Found a good clustering.")
-            print("Cost = {0}".format(cost))
-            break
-    
-    return Xclust, cent, cost
-
-def get_dissim(A, b):
-    # TODO: add other dissimilarity measures?
-    # simple matching dissimilarity
-    return (A != b).sum(axis=1)
-
-def init_centroids(X, init='Cao'):
+def init_centroids(X, k, init='Cao'):
     assert init in ('Huang', 'Cao')
+    N, at = X.shape
+    cent = np.empty((k, at))
     if init == 'Huang':
         # determine frequencies of attributes
         for iat in range(at):
@@ -153,28 +126,28 @@ def init_centroids(X, init='Cao'):
                 ndx = np.delete(ndx, 0)
             cent[ik] = X[ndx[0]]
     elif init == 'Cao':
+        # Note: O(N * at * k**2), so watch out with k
         # determine densities points
-        dens = np.array([])
-        for ix, curx in enumerate(X):
-            densAt = []
-            for iat in range(at):
-                freq = defaultdict(int)
-                for val in X[:,iat]:
-                    freq[val] += 1
-                densAt.append(freq[curx[iat]] / float(len(curx)))
-            dens[ix] = np.mean(densAt)
+        dens = np.zeros(N)
+        for iat in range(at):
+            freq = defaultdict(int)
+            for val in X[:,iat]:
+                freq[val] += 1
+            for iN in range(N):
+                dens[iN] += freq[X[iN,iat]] / float(at)
+        dens /= N
         
         # choose centroids based on distance and density
         cent[0] = X[np.argmax(dens)]
-        dissim = get_dissim(X, cent[0], dissimMeas)
+        dissim = get_dissim(X, cent[0])
         cent[1] = X[np.argmax(dissim * dens)]
         # for the reamining centroids, choose max dens * dissim to the (already assigned)
         # centroid with the lowest dens * dissim
         for ic in range(2,k):
             dd = np.empty((ic, N))
             for icp in range(ic):
-                dd[icp] = get_dissim(X, cent[icp], dissimMeas) * dens
-            cent[ic] = X[np.argmax(dd[np.argmin(dd, axis=0)])]
+                dd[icp] = get_dissim(X, cent[icp]) * dens
+            cent[ic] = X[np.argmax(np.min(dd, axis=0))]
     
     return cent
 
@@ -190,13 +163,10 @@ def update_centroid(freqs, centUpd):
         choices = [chc for chc, wght in freqs.items() for _ in range(wght)]
         return random.choice(choices)
 
-def key_for_max_value(d):
-    '''Very fast method (supposedly) to get key for maximum value in dict.
-
-    '''
-    v = list(d.values())
-    k = list(d.keys())
-    return k[v.index(max(v))]
+def get_dissim(A, b):
+    # TODO: add other dissimilarity measures?
+    # simple matching dissimilarity
+    return (A != b).sum(axis=1)
 
 def clustering_cost(X, clust, Xclust, **kwargs):
     '''Clustering cost, defined as the sum distance of all points
@@ -208,6 +178,42 @@ def clustering_cost(X, clust, Xclust, **kwargs):
         cost += get_dissim(X[Xclust==ic], curc).sum()
     return cost
 
+def key_for_max_value(d):
+    '''Very fast method (supposedly) to get key for maximum value in dict.
+
+    '''
+    v = list(d.values())
+    k = list(d.keys())
+    return k[v.index(max(v))]
+
+def opt_kmodes(X, k, preRuns=10, goodPctl=20, **kwargs):
+    '''Shell around k-modes algorithm that tries to ensure a good clustering result
+    by choosing one that has a relatively low clustering cost compared to the
+    costs of a number of pre-runs. (Huang [1998] states that clustering cost can be
+    used to judge the clustering quality.)
+
+    '''
+    
+    if kwargs['init'] == 'Cao' and kwargs['centUpd'] == 'mode':
+        print("""Hint: Cao initialization method + mode updates = deterministic.
+                No opt_kmodes necessary, run kmodes method directly instead.""")
+    
+    preCosts = []
+    print("Starting preruns...")
+    for _ in range(preRuns):
+        Xclust, cent, cost = kmodes(X, k, verbose=0, **kwargs)
+        preCosts.append(cost)
+        print("Cost = {0}".format(cost))
+    
+    while True:
+        Xclust, cent, cost = kmodes(X, k, verbose=1, **kwargs)
+        if cost <= np.percentile(preCosts, goodPctl):
+            print("Found a good clustering.")
+            print("Cost = {0}".format(cost))
+            break
+    
+    return Xclust, cent, cost
+
 if __name__ == "__main__":
     # reproduce results in Huang [1998]
     
@@ -218,8 +224,8 @@ if __name__ == "__main__":
     # drop columns with single value
     X = X[:,np.std(X, axis=0) > 0.]
     
-    #Xclust, cent, cost = kmodes(X, 4, init='Huang', centUpd='mode', maxIters=40)
-    Xclust, cent, cost = opt_kmodes(X, 4, preRuns=10, goodPctl=20, init='Huang', centUpd='mode', maxIters=40)
+    #Xclust, cent, cost = kmodes(X, 4, init='Huang', centUpd='mode', maxIters=100)
+    Xclust, cent, cost = opt_kmodes(X, 4, preRuns=10, goodPctl=20, init='Huang', centUpd='mode', maxIters=100)
     
     classtable = np.zeros((4,4), dtype='int64')
     for ii,_ in enumerate(y):

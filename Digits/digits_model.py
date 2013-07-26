@@ -14,7 +14,6 @@ from pylearn2.costs.mlp.dropout import Dropout
 from pylearn2.space import Conv2DSpace
 from pylearn2.training_algorithms.sgd import SGD, ExponentialDecay, MomentumAdjustor
 from pylearn2.termination_criteria import EpochCounter, MonitorBased
-from sklearn.metrics.metrics import accuracy_score
 from sklearn import cross_validation, linear_model
 
 DATA_DIR = '/home/nico/datasets/Kaggle/Digits/'
