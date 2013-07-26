@@ -4,11 +4,10 @@ import os
 import numpy as np
 import pandas as pd
 import itertools
-from sklearn import cross_validation, ensemble, linear_model
+from sklearn import preprocessing, cross_validation, ensemble, linear_model
 from scipy import sparse
 from collections import defaultdict
 from Employee import kmodes
-from Employee.selectiveonehotencoder import SelectiveOneHotEncoder
 from random import Random
 import inspyred
 
@@ -100,7 +99,8 @@ if __name__ == "__main__":
             allData = np.hstack((allData, combData))
     
     numFeatures = allData.shape[1]
-    # store indices of rare feature values
+    
+    print("Consolidating rare features...")
     rare = np.empty((allData.shape[1], allData.shape[0]), dtype='bool')
     for ii, feat in enumerate(allData.T):
         counts = defaultdict(int)
@@ -108,16 +108,16 @@ if __name__ == "__main__":
             counts[el] += 1
         rare[ii] = [counts[x] <= ftresh for x in feat]
     rare = rare.T
+    # put all rare values to unique groups with 0 as values
+    allData = np.where(rare, allData, -1)
+    allData += 1
     
     print("Performing feature selection...")
     cvModel = ensemble.GradientBoostingClassifier(n_estimators=40, max_depth=5,
                 min_samples_leaf=10, subsample=0.5, max_features=0.25)
-    # replace predict so that we can use AUC in cross-validation
-    cvModel.predict = lambda m, x: m.predict_proba(x)[:,1]
     
-    # Xts holds one hot encodings for each individual feature in memory
-    # speeding up feature selection 
-    Xts = [SelectiveOneHotEncoder().fit_transform(allData[:numTrain,[i]], rare[:numTrain,[i]]) for i in range(numFeatures)]
+    # Xts holds one hots encodings for each individual feature in memory, speeding up feature selection 
+    Xts = [preprocessing.OneHotEncoder().fit_transform(allData[:numTrain,[i]]) for i in range(numFeatures)]
     
     print("Performing smart feature selection...")
     prng = Random()
@@ -181,10 +181,10 @@ if __name__ == "__main__":
     allData = allData[:, bestFeats]
     
     print("Converting to one-hot...")
-    ohEncoder = SelectiveOneHotEncoder()
+    ohEncoder = preprocessing.OneHotEncoder()
     ohEncoder.fit(allData)
-    xTrain = ohEncoder.transform(allData[:numTrain], rare[:numTrain])
-    xTest = ohEncoder.transform(allData[numTrain:], rare[numTrain:])
+    xTrain = ohEncoder.transform(allData[:numTrain])
+    xTest = ohEncoder.transform(allData[numTrain:])
     
     print("Training models...")
     models = [  ensemble.GradientBoostingClassifier(n_estimators=50, max_depth=10,
