@@ -1,21 +1,26 @@
+
 import numbers
 
 import numpy as np
-import scipy.sparse as sp
+import numpy.ma as ma
+from scipy import sparse
 
-from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.utils import check_arrays
+from .base import BaseEstimator, TransformerMixin
+from .utils import check_arrays
 
 class SelectiveOneHotEncoder(BaseEstimator, TransformerMixin):
-    def __init__(self, n_values="auto", dtype=np.float):
+    def __init__(self, n_values="auto", categorical_features="all",
+                 dtype=np.float):
         self.n_values = n_values
+        self.categorical_features = categorical_features
         self.dtype = dtype
 
     def fit(self, X, y=None, rare=None):
-        self.fit_transform(X)
+        self.fit_transform(X, rare)
         return self
 
-    def fit_transform(self, X, y=None, rare=None):
+    def _fit_transform(self, X, rare):
+        """Assumes X contains only categorical features."""
         X = check_arrays(X, sparse_format='dense', dtype=np.int)[0]
         if np.any(X < 0):
             raise ValueError("X needs to contain only non-negative integers.")
@@ -39,24 +44,29 @@ class SelectiveOneHotEncoder(BaseEstimator, TransformerMixin):
         n_values = np.hstack([[0], n_values])
         indices = np.cumsum(n_values)
         self.feature_indices_ = indices
-        
+
         column_indices = (X + indices[:-1]).ravel()
         row_indices = np.repeat(np.arange(n_samples, dtype=np.int32),
                                 n_features)
         data = np.ones(n_samples * n_features)
-        out = sp.coo_matrix((data, (row_indices, column_indices)),
-                            shape=(n_samples, indices[-1]),
-                            dtype=self.dtype).tocsr()
+        out = sparse.coo_matrix((data, (row_indices, column_indices)),
+                                shape=(n_samples, indices[-1]),
+                                dtype=self.dtype).tocsr()
 
         if self.n_values == 'auto':
             mask = np.array(out.sum(axis=0)).ravel() != 0
             active_features = np.where(mask)[0]
             out = out[:, active_features]
             self.active_features_ = active_features
-        
+
         return out
 
-    def transform(self, X, rare=None):
+    def fit_transform(self, X, y=None, rare=None):
+        return _transform_selected(X, self._fit_transform,
+                                   self.categorical_features, copy=True)
+
+    def _transform(self, X, rare):
+        """Asssumes X contains only categorical features."""
         X = check_arrays(X, sparse_format='dense', dtype=np.int)[0]
         if np.any(X < 0):
             raise ValueError("X needs to contain only non-negative integers.")
@@ -76,9 +86,14 @@ class SelectiveOneHotEncoder(BaseEstimator, TransformerMixin):
         row_indices = np.repeat(np.arange(n_samples, dtype=np.int32),
                                 n_features)
         data = np.ones(n_samples * n_features)
-        out = sp.coo_matrix((data, (row_indices, column_indices)),
-                            shape=(n_samples, indices[-1]),
-                            dtype=self.dtype).tocsr()
+        out = sparse.coo_matrix((data, (row_indices, column_indices)),
+                                shape=(n_samples, indices[-1]),
+                                dtype=self.dtype).tocsr()
         if self.n_values == 'auto':
             out = out[:, self.active_features_]
         return out
+
+    def transform(self, X, rare):
+        return _transform_selected(X, self._transform,
+                                   self.categorical_features, copy=True)
+
