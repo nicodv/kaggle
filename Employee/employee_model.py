@@ -24,8 +24,9 @@ def construct_combined_features(data, degree=2):
     new_data = []
     _, nfeat = data.shape
     for indices in itertools.combinations(range(nfeat), degree):
-        new_data.append([hash(tuple(v)) for v in data[:,indices]])
-    return np.array(new_data).T
+        group_ids = data.groupby(list(data.columns[list(indices)])).grouper.group_info[0]
+        new_data.append(group_ids)
+    return new_data.transpose()
 
 def create_submission(predictions, filename):
     print("Saving submission...")
@@ -93,10 +94,12 @@ if __name__ == "__main__":
     
     print("Combining features...")
     # create higher-order features
+    allData = pd.DataFrame(allData)
     if featDegree > 1:
         for fd in range(2,featDegree+1):
             combData = construct_combined_features(allData, degree=fd)
-            allData = np.hstack((allData, combData))
+            allData = pd.concat((allData, combData), axis=1)
+    allData = np.array(allData)
     
     numFeatures = allData.shape[1]
     
