@@ -94,9 +94,12 @@ def selective_ycoldencoder(data, y, ftresh):
     ysums = [defaultdict(int) for _ in range(data.shape[1])]
     for iN, col in enumerate(data.T):
         counts = defaultdict(int)
-        for el in col:
+        for j, el in enumerate(col):
             counts[el] += 1
-            ysums[iN][el] += y[el]
+            if j >= len(y):
+                ysums[iN][el] += 0.5
+            else:
+                ysums[iN][el] += y[el]
         
         uniques = set([x for x in col if counts[x] > ftresh])
         keymap.append(dict((key, i) for i, key in enumerate(uniques)))
@@ -107,7 +110,7 @@ def selective_ycoldencoder(data, y, ftresh):
         num_labels = len(km)
         for j, val in enumerate(col):
             if val in km:
-                outmat[j, iN] = ysums[iN][val] / float(num_labels)
+                outmat[j, iN] = float(ysums[iN][val]) / num_labels
     return outmat
 
 if __name__ == "__main__":
@@ -151,7 +154,7 @@ if __name__ == "__main__":
     
     print("Performing feature selection...")
     numFeatures = allData.shape[1]
-    cvModel = linear_model.LogisticRegression(penalty='l2', class_weight='auto', random_state=rseed)
+    cvModel = linear_model.LogisticRegression(penalty='l2', C=2.0, class_weight='auto', random_state=rseed)
     
     # Xts holds one hots encodings for each individual feature in memory, speeding up feature selection 
     Xts = [selective_onehotencoder(allData[:numTrain,[i]], ftresh)[0] for i in range(numFeatures)]
