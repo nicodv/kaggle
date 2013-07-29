@@ -33,8 +33,6 @@ class KModes(object):
                     init        = initialization method ('Huang' for the one described in
                                   Huang [1998], 'Cao' for the more advanced one in
                                   Cao et al. [2009])
-                    centUpd     = centroid updating method ('mode' for most common
-                                  attribute or 'wsample' for weighted sampling)
                     maxIters    = maximum no. of iterations
         '''
         # convert to numpy array, if needed
@@ -49,16 +47,16 @@ class KModes(object):
         #    INIT
         # ----------------------
         print("Init: initializing centroids")
-        cent = _init_centroids(X)
+        cent = self._init_centroids(X)
         
         print("Init: initializing clusters")
-        member = np.zeros((self.k, N))
+        member = np.zeros((self.k, N), dtype='int32')
         # clustFreq is a list of lists with dictionaries that contain the
         # frequencies of values per cluster and attribute
         clustFreq = [[defaultdict(int) for _ in range(at)] for _ in range(self.k)]
         for ix, curx in enumerate(X):
             # initial assigns to clusters
-            dissim = _get_dissim(cent, curx)
+            dissim = self.get_dissim(cent, curx)
             cluster = dissim.argsort()[0]
             member[cluster,ix] = 1
             # count attribute values per cluster
@@ -67,7 +65,7 @@ class KModes(object):
         # perform an initial centroid update
         for ik in range(self.k):
             for iat in range(at):
-                cent[ik,iat] = _update_centroid(clustFreq[ik][iat])
+                cent[ik,iat] = key_for_max_value(clustFreq[ik][iat])
         
         # ----------------------
         #    ITERATION
@@ -79,24 +77,21 @@ class KModes(object):
             itr += 1
             moves = 0
             for ix, curx in enumerate(X):
-                dissim = get_dissim(cent, curx)
-                cluster = dissim.argsort()[0]
+                dissim = self.get_dissim(cent, curx)
+                cluster = np.argmin(dissim)
                 # if necessary: move point, and update old/new cluster frequencies and centroids
                 if not member[cluster, ix]:
                     moves += 1
                     oldcluster = np.argwhere(member[:,ix])
                     member[oldcluster,ix] = 0
                     member[cluster,ix] = 1
-                    assert all(np.sum(member, axis=0) == 1)
-                    assert all(0 < np.sum(member, axis=1) < N)
                     for iat, val in enumerate(curx):
                         # update frequencies of attributes in clusters
                         clustFreq[cluster][iat][val] += 1
                         clustFreq[oldcluster][iat][val] -= 1
-                        assert clustFreq[oldcluster][iat][val] >= 0
-                        # update the new and old centroids by choosing (from) the most likely attribute(s)
+                        # update new and old centroids by choosing most likely attribute
                         for curc in (cluster, oldcluster):
-                            cent[curc, iat] = _update_centroid(clustFreq[curc][iat])
+                            cent[curc, iat] = key_for_max_value(clustFreq[curc][iat])
                     if verbose == 2:
                         print("Move from cluster {0} to {1}".format(oldcluster, cluster))
             
@@ -105,9 +100,10 @@ class KModes(object):
             if verbose:
                 print("Iteration: {0}/{1}, moves: {2}".format(itr, maxIters, moves))
         
-        self.cost = clustering_cost(X, cent, member, alpha=1)
+        self.cost = self.clustering_cost(X, cent, member)
         self.cent = cent
-        self.Xclust = np.array([np.argwhere(member[x]) for x in range(N)])
+        self.Xclust = np.array([int(np.argwhere(member[:,x])) for x in range(N)])
+        self.member = member
     
     def _init_centroids(self, X):
         assert self.init in ('Huang', 'Cao')
@@ -130,7 +126,7 @@ class KModes(object):
             # the previously chosen centroids could result in empty clusters,
             # so set centroid to closest point in X
             for ik in range(self.k):
-                dissim = get_dissim(X, cent[ik])
+                dissim = self.get_dissim(X, cent[ik])
                 ndx = dissim.argsort()
                 # we want the centroid to be unique
                 while np.all(X[ndx[0]] == cent, axis=1).any():
@@ -150,29 +146,17 @@ class KModes(object):
             
             # choose centroids based on distance and density
             cent[0] = X[np.argmax(dens)]
-            dissim = get_dissim(X, cent[0])
+            dissim = self.get_dissim(X, cent[0])
             cent[1] = X[np.argmax(dissim * dens)]
             # for the reamining centroids, choose max dens * dissim to the (already assigned)
             # centroid with the lowest dens * dissim
             for ic in range(2,self.k):
                 dd = np.empty((ic, N))
                 for icp in range(ic):
-                    dd[icp] = get_dissim(X, cent[icp]) * dens
+                    dd[icp] = self.get_dissim(X, cent[icp]) * dens
                 cent[ic] = X[np.argmax(np.min(dd, axis=0))]
         
         return cent
-    
-    def _update_centroid(self,freqs):
-        # TODO: Taking the mode (i.e. highest frequency element), which is what Huang [1998]
-        # suggests, converges faster and takes less processing power. However, weighted sampling
-        # in the centroid update makes intuitive sense to me and might offer better
-        # generalization. Investigate.
-        assert self.centUpd in ('mode', 'wsample')
-        if self.centUpd == 'mode':
-            return key_for_max_value(freqs)
-        elif self.centUpd == 'wsample':
-            choices = [chc for chc, wght in freqs.items() for _ in range(wght)]
-            return random.choice(choices)
     
     def get_dissim(self, A, b):
         # TODO: add other dissimilarity measures?
@@ -186,25 +170,26 @@ class KModes(object):
         '''
         cost = 0
         for ic, curc in enumerate(clust):
-            cost += get_dissim(X[member[ic]], curc).sum()
+            cost += self.get_dissim(X[np.where(member[ic])], curc).sum()
         return cost
 
 ################################################################################
 
 class FuzzyKModes(KModes):
     
-    def __init__(self, k, alpha):
+    def __init__(self, k, alpha=1.1):
         '''Fuzzy k-modes clustering algorithm for categorical data.
         See Huang and Ng [1999] and Kim et al. [2004].
         
         Inputs:     k       = number of clusters
                     alpha   = alpha coefficient
-        Attributes: member  = membership matrix [k * no. points]
+        Attributes: Xclust  = cluster numbers with max. membership [no. points]
+                    member  = membership matrix [k * no. points]
                     cent    = centroids [k * no. attributes]
                     cost    = clustering cost
         
         '''
-        super(FuzzyKModes).__init__(self, k)
+        super(FuzzyKModes, self).__init__(k)
         
         assert alpha > 1, "alpha should be > 1 (alpha = 1 equals regular k-modes)."
         self.alpha = alpha
@@ -222,23 +207,29 @@ class FuzzyKModes(KModes):
         
         '''
         
+        # convert to numpy array, if needed
+        X = np.asanyarray(X)
+        N, at = X.shape
+        assert self.k < N, "More clusters than data points?"
+        
         self.init = init
+        assert centType in ('hard','fuzzy')
         self.centType = centType
         
         # ----------------------
         #    INIT
         # ----------------------
         print("Init: initializing centroids")
-        cent = _init_centroids(X)
+        cent = self._init_centroids(X)
         if self.centType == 'fuzzy':
-            cent = _fuzzify_centroids(cent)
+            cent = self._fuzzify_centroids(cent)
         
         # store for all attributes which points have a certain attribute value
         # this is the main input to the centroid update
         domAtX = [defaultdict(list) for _ in range(at)]
         for iN, curx in enumerate(X):
-            for iat, at in enumerate(curx):
-                domAtX[iat][at].append(iat)
+            for iat, val in enumerate(curx):
+                domAtX[iat][val].append(iN)
         
         # ----------------------
         #    ITERATION
@@ -249,50 +240,53 @@ class FuzzyKModes(KModes):
         converged = False
         lastCost = np.inf
         while itr <= maxIters and not converged:
-            member = _update_fuzzy_membership(cent, X)
-            assert all(1-tiny < np.sum(member, axis=0) < 1+tiny)
-            assert all(0 < np.sum(member, axis=1) < N)
-            for ik in range(k):
+            member = self._update_fuzzy_membership(cent, X)
+            assert 1-tiny < all(np.sum(member, axis=0)) < 1+tiny
+            sum1 = np.sum(member, axis=1)
+            assert all(0 < sum1)  and all(sum1 < N)
+            for ik in range(self.k):
                 for iat in range(at):
-                    cent[ik][iat] = _update_centroid(domAtX[iat], member[ik])
-            cost = clustering_cost(X, cent, member)
+                    cent[ik][iat] = self._update_centroid(domAtX[iat], member[ik])
+            cost = self.clustering_cost(X, cent, member)
             converged = cost == lastCost
             lastCost = cost
             if verbose:
                 print("Iteration: {0}/{1}, cost: {2}".format(itr, maxIters, cost))
             itr += 1
+        
+        self.cost = cost
+        self.cent = cent
+        self.Xclust = np.array([int(np.argmax(member[:,x])) for x in range(N)])
+        self.member = member
     
     def _fuzzify_centroids(self, cent):
         pass
     
     def _update_fuzzy_membership(self, cent, X):
-        k = cent.shape[0]
         N = X.shape[0]
         member = np.empty((self.k, N))
         for iN, curx in enumerate(X):
-            if self.centType == 'crisp':
-                dissim = get_dissim(cent, curx)
+            if self.centType == 'hard':
+                dissim = self.get_dissim(cent, curx)
             elif self.centType == 'fuzzy':
-                dissim = get_fuzzy_dissim(cent, curx)
+                dissim = self.get_fuzzy_dissim(cent, curx)
             if np.any(dissim == 0):
                 member[:,iN] = np.where(dissim == 0, 1, 0)
             else:
                 for ik, curc in enumerate(cent):
-                    num = dissim[ik]
-                    denom = np.delete(dissim,ik)
-                    member[ik,iN] = 1 / np.sum( (num / denom)**(1/(self.alpha-1)) )
+                    factor = 1. / (self.alpha - 1)
+                    member[ik,iN] = 1 / np.sum( (float(dissim[ik]) / dissim)**factor )
         return member
     
-    def _update_centroid(self, domAtX, member, centType):
-        assert centType in ('hard','fuzzy')
-        if centType == 'hard':
+    def _update_centroid(self, domAtX, member):
+        if self.centType == 'hard':
             # return attribute that maximizes the sum of the memberships
             v = list(domAtX.values())
             k = list(domAtX.keys())
-            return k[v.index(max(sum(member(v)**self.alpha)))]
-        elif centType == 'fuzzy':
+            members = [sum(member[x]**self.alpha) for x in v]
+            return k[np.argmax(members)]
+        elif self.centType == 'fuzzy':
             pass
-        return upd
     
     def _get_fuzzy_dissim(self, A, b):
         pass
@@ -304,7 +298,7 @@ def key_for_max_value(d):
     k = list(d.keys())
     return k[v.index(max(v))]
 
-def opt_kmodes(X, k, preRuns=10, goodPctl=20, **kwargs):
+def opt_kmodes(k, X, preRuns=10, goodPctl=20, **kwargs):
     '''Shell around k-modes algorithm that tries to ensure a good clustering result
     by choosing one that has a relatively low clustering cost compared to the
     costs of a number of pre-runs. (Huang [1998] states that clustering cost can be
@@ -321,12 +315,14 @@ def opt_kmodes(X, k, preRuns=10, goodPctl=20, **kwargs):
     preCosts = []
     print("Starting preruns...")
     for _ in range(preRuns):
-        kmodes = KModes(k).cluster(X, verbose=0, **kwargs)
+        kmodes = KModes(k)
+        kmodes.cluster(X, verbose=0, **kwargs)
         preCosts.append(kmodes.cost)
         print("Cost = {0}".format(kmodes.cost))
     
     while True:
-        kmodes = KModes(k).cluster(X, verbose=1, **kwargs)
+        kmodes = KModes(k)
+        kmodes.cluster(X, verbose=1, **kwargs)
         if kmodes.cost <= np.percentile(preCosts, goodPctl):
             print("Found a good clustering.")
             print("Cost = {0}".format(kmodes.cost))
@@ -342,9 +338,11 @@ if __name__ == "__main__":
     # drop columns with single value
     X = X[:,np.std(X, axis=0) > 0.]
     
-    #kmodes = opt_kmodes(X, 4, preRuns=10, goodPctl=20, init='Huang', centUpd='mode', maxIters=100)
-    kmodes = KModes(4).cluster(X, init='Huang', centUpd='mode', maxIters=100)
-    fkmodes = FuzzyKModes(4).cluster(X, init='Cao', centType='hard', maxIters=100)
+    #kmodes = opt_kmodes(4, X, preRuns=10, goodPctl=20, init='Cao', maxIters=100)
+    kmodes = KModes(4)
+    kmodes.cluster(X, init='Huang', maxIters=100)
+    #fkmodes = FuzzyKModes(4, alpha=1.1)
+    #fkmodes.cluster(X, init='Huang', centType='hard', maxIters=100)
     
     classtable = np.zeros((4,4), dtype='int64')
     for ii,_ in enumerate(y):
