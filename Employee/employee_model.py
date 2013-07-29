@@ -78,8 +78,8 @@ def selective_onehotencoder(data, ftresh):
     
     total_pts = data.shape[0]
     outdat = []
-    for i, col in enumerate(data.T):
-        km = keymap[i]
+    for iN, col in enumerate(data.T):
+        km = keymap[iN]
         num_labels = len(km)
         spmat = sparse.lil_matrix((total_pts, num_labels))
         for j, val in enumerate(col):
@@ -88,6 +88,27 @@ def selective_onehotencoder(data, ftresh):
         outdat.append(spmat)
     outdat = sparse.hstack(outdat).tocsr()
     return outdat, keymap
+
+def selective_ycoldencoder(data, y, ftresh):
+    keymap = []
+    ysums = [defaultdict(int) for _ in range(data.shape[1])]
+    for iN, col in enumerate(data.T):
+        counts = defaultdict(int)
+        for el in col:
+            counts[el] += 1
+            ysums[iN][el] += y[el]
+        
+        uniques = set([x for x in col if counts[x] > ftresh])
+        keymap.append(dict((key, i) for i, key in enumerate(uniques)))
+    
+    outmat = np.empty(data.shape)
+    for iN, col in enumerate(data.T):
+        km = keymap[iN]
+        num_labels = len(km)
+        for j, val in enumerate(col):
+            if val in km:
+                outmat[j, iN] = ysums[iN][val] / float(num_labels)
+    return outmat
 
 if __name__ == "__main__":
     
