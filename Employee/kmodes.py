@@ -28,11 +28,10 @@ class KModes(object):
         assert k > 1, "Choose at least 2 clusters."
         self.k = k
     
-    def cluster(self, X, init='Cao', centUpd='mode', maxIters=100, verbose=1):
+    def cluster(self, X, init='Huang', maxIters=100, verbose=1):
         '''Inputs:  X           = data points [no. attributes * no. points]
                     init        = initialization method ('Huang' for the one described in
-                                  Huang [1998], 'Cao' for the more advanced one in
-                                  Cao et al. [2009])
+                                  Huang [1998], 'Cao' for the one in Cao et al. [2009])
                     maxIters    = maximum no. of iterations
         '''
         # convert to numpy array, if needed
@@ -41,7 +40,6 @@ class KModes(object):
         assert self.k < N, "More clusters than data points?"
         
         self.init = init
-        self.centUpd = centUpd
         
         # ----------------------
         #    INIT
@@ -57,7 +55,7 @@ class KModes(object):
         for ix, curx in enumerate(X):
             # initial assigns to clusters
             dissim = self.get_dissim(cent, curx)
-            cluster = dissim.argsort()[0]
+            cluster = np.argmin(dissim)
             member[cluster,ix] = 1
             # count attribute values per cluster
             for iat, val in enumerate(curx):
@@ -128,7 +126,7 @@ class KModes(object):
             for ik in range(self.k):
                 dissim = self.get_dissim(X, cent[ik])
                 ndx = dissim.argsort()
-                # we want the centroid to be unique
+                # and we want the centroid to be unique
                 while np.all(X[ndx[0]] == cent, axis=1).any():
                     ndx = np.delete(ndx, 0)
                 cent[ik] = X[ndx[0]]
@@ -177,7 +175,7 @@ class KModes(object):
 
 class FuzzyKModes(KModes):
     
-    def __init__(self, k, alpha=1.1):
+    def __init__(self, k, alpha=1.5):
         '''Fuzzy k-modes clustering algorithm for categorical data.
         See Huang and Ng [1999] and Kim et al. [2004].
         
@@ -194,12 +192,12 @@ class FuzzyKModes(KModes):
         assert alpha > 1, "alpha should be > 1 (alpha = 1 equals regular k-modes)."
         self.alpha = alpha
     
-    def cluster(self, X, init='Cao', centType='fuzzy', maxIters=100, verbose=1):
+    def cluster(self, X, init='Huang', centType='fuzzy', maxIters=100, verbose=1):
         '''Inputs:  X           = data points [no. attributes * no. points]
                     init        = initialization method ('Huang' for the one described in
-                                  Huang [1998], 'Cao' for the more advanced one in
-                                  Cao et al. [2009]). In case of fuzzy centroids,
-                                  an additional fuzzification is performed.
+                                  Huang [1998], 'Cao' for the one in Cao et al. [2009]).
+                                  In case of fuzzy centroids, an additional
+                                  fuzzification is performed on the initial clusters.
                     centType    = centroid type ('hard' for traditional, hard
                                   centroids [Huang and Ng, 1999] or 'fuzzy' for
                                   fuzzy centroids [Kim et al., 2004])
@@ -266,10 +264,7 @@ class FuzzyKModes(KModes):
         N = X.shape[0]
         member = np.empty((self.k, N))
         for iN, curx in enumerate(X):
-            if self.centType == 'hard':
-                dissim = self.get_dissim(cent, curx)
-            elif self.centType == 'fuzzy':
-                dissim = self.get_fuzzy_dissim(cent, curx)
+            dissim = self.get_dissim(cent, curx)
             if np.any(dissim == 0):
                 member[:,iN] = np.where(dissim == 0, 1, 0)
             else:
@@ -283,13 +278,23 @@ class FuzzyKModes(KModes):
             # return attribute that maximizes the sum of the memberships
             v = list(domAtX.values())
             k = list(domAtX.keys())
-            members = [sum(member[x]**self.alpha) for x in v]
-            return k[np.argmax(members)]
+            memvar = [sum(member[x]**self.alpha) for x in v]
+            return k[np.argmax(memvar)]
         elif self.centType == 'fuzzy':
             pass
     
-    def _get_fuzzy_dissim(self, A, b):
-        pass
+    def get_dissim(self, A, b):
+        if self.clustType == 'hard:
+            # simple matching dissimilarity
+            return (A != b).sum(axis=1)
+        elif self.clustType == 'fuzzy':
+            return 0
+    
+    def clustering_cost(self, X, clust, member):
+        cost = 0
+        for ic, curc in enumerate(clust):
+            cost += np.sum( self.get_dissim(X[:,ic], curc) * (member[ic] ** self.alpha) )
+        return cost
 
 
 def key_for_max_value(d):
@@ -309,8 +314,8 @@ def opt_kmodes(k, X, preRuns=10, goodPctl=20, **kwargs):
     '''
     
     if kwargs['init'] == 'Cao' and kwargs['centUpd'] == 'mode':
-        print("""Hint: Cao initialization method + mode updates = deterministic.
-                No opt_kmodes necessary, run kmodes method directly instead.""")
+        print("Hint: Cao initialization method + mode updates = deterministic. \
+                No opt_kmodes necessary, run kmodes method directly instead.")
     
     preCosts = []
     print("Starting preruns...")
@@ -338,19 +343,24 @@ if __name__ == "__main__":
     # drop columns with single value
     X = X[:,np.std(X, axis=0) > 0.]
     
-    #kmodes = opt_kmodes(4, X, preRuns=10, goodPctl=20, init='Cao', maxIters=100)
-    kmodes = KModes(4)
-    kmodes.cluster(X, init='Huang', maxIters=100)
-    #fkmodes = FuzzyKModes(4, alpha=1.1)
-    #fkmodes.cluster(X, init='Huang', centType='hard', maxIters=100)
+    #kmodes_h = opt_kmodes(4, X, preRuns=10, goodPctl=20, init='Huang', maxIters=100)
+    kmodes_huang = KModes(4)
+    kmodes_huang.cluster(X, init='Huang')
+    kmodes_cao = KModes(4)
+    kmodes_cao.cluster(X, init='Cao')
+    fkmodes_hard = FuzzyKModes(4, alpha=1.1)
+    fkmodes_hard.cluster(X, init='Huang', centType='hard')
+    fkmodes_fuzzy = FuzzyKModes(4, alpha=1.1)
+    fkmodes_fuzzy.cluster(X, init='Huang', centType='fuzzy')
     
-    classtable = np.zeros((4,4), dtype='int64')
-    for ii,_ in enumerate(y):
-        classtable[int(y[ii][-1])-1,kmodes.Xclust[ii]] += 1
-    
-    print("    | Clust 1 | Clust 2 | Clust 3 | Clust 4 |")
-    print("----|---------|---------|---------|---------|")
-    for ii in range(4):
-        prargs = tuple([ii+1] + list(classtable[ii,:]))
-        print(" D{0} |      {1:>2} |      {2:>2} |      {3:>2} |      {4:>2} |".format(*prargs))
+    for result in (kmodes_huang, kmodes_cao, fkmodes_hard, fkmodes_fuzzy):
+        classtable = np.zeros((4,4), dtype='int64')
+        for ii,_ in enumerate(y):
+            classtable[int(y[ii][-1])-1,result.Xclust[ii]] += 1
+        
+        print("    | Clust 1 | Clust 2 | Clust 3 | Clust 4 |")
+        print("----|---------|---------|---------|---------|")
+        for ii in range(4):
+            prargs = tuple([ii+1] + list(classtable[ii,:]))
+            print(" D{0} |      {1:>2} |      {2:>2} |      {3:>2} |      {4:>2} |".format(*prargs))
     
