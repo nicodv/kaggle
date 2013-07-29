@@ -192,7 +192,7 @@ class FuzzyKModes(KModes):
         assert alpha > 1, "alpha should be > 1 (alpha = 1 equals regular k-modes)."
         self.alpha = alpha
     
-    def cluster(self, X, init='Huang', centType='fuzzy', maxIters=100, verbose=1):
+    def cluster(self, X, init='Huang', centType='fuzzy', maxIters=200, costInter=10, verbose=1):
         '''Inputs:  X           = data points [no. attributes * no. points]
                     init        = initialization method ('Huang' for the one described in
                                   Huang [1998], 'Cao' for the one in Cao et al. [2009]).
@@ -202,6 +202,8 @@ class FuzzyKModes(KModes):
                                   centroids [Huang and Ng, 1999] or 'fuzzy' for
                                   fuzzy centroids [Kim et al., 2004])
                     maxIters    = maximum no. of iterations
+                    costInter   = frequency with which to check the total cost
+                                  (this is computationally expensive, so this speeds things up)
         
         '''
         
@@ -245,11 +247,13 @@ class FuzzyKModes(KModes):
             for ik in range(self.k):
                 for iat in range(at):
                     cent[ik][iat] = self._update_centroid(domAtX[iat], member[ik])
-            cost = self.clustering_cost(X, cent, member)
-            converged = cost == lastCost
-            lastCost = cost
-            if verbose:
-                print("Iteration: {0}/{1}, cost: {2}".format(itr, maxIters, cost))
+            # computationally expensive, only check every N steps
+            if itr % costInter == 0:
+                cost = self.clustering_cost(X, cent, member)
+                converged = cost >= lastCost
+                lastCost = cost
+                if verbose:
+                    print("Iteration: {0}/{1}, cost: {2}".format(itr, maxIters, cost))
             itr += 1
         
         self.cost = cost
@@ -293,7 +297,7 @@ class FuzzyKModes(KModes):
     def clustering_cost(self, X, clust, member):
         cost = 0
         for ic, curc in enumerate(clust):
-            cost += np.sum( self.get_dissim(X[:,ic], curc) * (member[ic] ** self.alpha) )
+            cost += np.sum( self.get_dissim(X, curc) * (member[ic] ** self.alpha) )
         return cost
 
 
