@@ -228,13 +228,13 @@ class FuzzyKModes(KModes):
         
         if centType == 'fuzzy':
             # omega = fuzzy set (as dict) for each attribute per cluster
-            omega = [[{} for _ in range(at)] for _ in range(k)]
-            for _ in range(k):
+            omega = [[{} for _ in range(at)] for _ in range(self.k)]
+            for ik in range(self.k):
                 for iat in range(at):
                     rands = np.random.rand(len(domAt[iat]))
                     rands = rands / sum(rands)
                     for ival, val in enumerate(domAt[iat]):
-                        omega[k][iat][val] = rands[ival]
+                        omega[ik][iat][val] = rands[ival]
         elif centType == 'hard':
             omega = None
         
@@ -243,11 +243,10 @@ class FuzzyKModes(KModes):
         # ----------------------
         print("Starting iterations...")
         itr = 0
-        tiny = 1e-6
         converged = False
         lastCost = np.inf
         while itr <= maxIters and not converged:
-            member = _update_membership(cent, X, omega):
+            member = self._update_membership(cent, X, omega)
             for ik in range(self.k):
                 for iat in range(at):
                     cent[ik][iat] = self._update_centroid(domAt[iat], member[ik])
@@ -284,8 +283,8 @@ class FuzzyKModes(KModes):
     def _update_centroid(self, domAt, member):
         if self.centType == 'hard':
             # return attribute that maximizes the sum of the memberships
-            v = list(domAtX.values())
-            k = list(domAtX.keys())
+            v = list(domAt.values())
+            k = list(domAt.keys())
             memvar = [sum(member[x]**self.alpha) for x in v]
             return k[np.argmax(memvar)]
         elif self.centType == 'fuzzy':
@@ -301,7 +300,10 @@ class FuzzyKModes(KModes):
     def clustering_cost(self, X, cent, member, omega):
         cost = 0
         for iN, curx in enumerate(X):
-            cost += np.sum( self.get_fuzzy_dissim(cent, curx, omega) * (member[:iN] ** self.alpha) )
+            if self.centType == 'hard':
+                cost += np.sum( self.get_dissim(cent, curx) * (member[:,iN] ** self.alpha) )
+            elif self.centType == 'fuzzy':
+                cost += np.sum( self.get_fuzzy_dissim(cent, curx, omega) * (member[:,iN] ** self.alpha) )
         return cost
 
 
@@ -358,10 +360,10 @@ if __name__ == "__main__":
     kmodes_cao.cluster(X, init='Cao')
     fkmodes_hard = FuzzyKModes(4, alpha=1.1)
     fkmodes_hard.cluster(X, init='Huang', centType='hard')
-    fkmodes_fuzzy = FuzzyKModes(4, alpha=1.1)
-    fkmodes_fuzzy.cluster(X, init='Huang', centType='fuzzy')
+    #fkmodes_fuzzy = FuzzyKModes(4, alpha=1.1)
+    #fkmodes_fuzzy.cluster(X, init='Huang', centType='fuzzy')
     
-    for result in (kmodes_huang, kmodes_cao, fkmodes_hard, fkmodes_fuzzy):
+    for result in (kmodes_huang, kmodes_cao, fkmodes_hard):
         classtable = np.zeros((4,4), dtype='int64')
         for ii,_ in enumerate(y):
             classtable[int(y[ii][-1])-1,result.Xclust[ii]] += 1

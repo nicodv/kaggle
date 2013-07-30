@@ -10,7 +10,6 @@ from collections import defaultdict
 from Employee import kmodes
 from random import Random
 import inspyred
-from multiprocessing import Pool
 
 
 DATA_DIR = '/home/nico/datasets/Kaggle/Employee/'
@@ -90,36 +89,30 @@ def selective_onehotencoder(data, ftresh):
     return outdat, keymap
 
 def selective_ycoldencoder(data, y, ftresh):
-    keymap = []
+    counts = [defaultdict(int) for _ in range(data.shape[1])]
     ysums = [defaultdict(int) for _ in range(data.shape[1])]
     for iN, col in enumerate(data.T):
-        counts = defaultdict(int)
         for j, el in enumerate(col):
-            counts[el] += 1
             if j >= len(y):
                 ysums[iN][el] += 0.5
             else:
-                ysums[iN][el] += y[el]
-        
-        uniques = set([x for x in col if counts[x] > ftresh])
-        keymap.append(dict((key, i) for i, key in enumerate(uniques)))
+                ysums[iN][el] += y[j]
+            counts[iN][el] += 1
     
-    outmat = np.empty(data.shape)
+    outmat = np.ones(data.shape) * 0.5
     for iN, col in enumerate(data.T):
-        km = keymap[iN]
-        num_labels = len(km)
         for j, val in enumerate(col):
-            if val in km:
-                outmat[j, iN] = float(ysums[iN][val]) / num_labels
+            if counts[iN][val]:
+                outmat[j, iN] = float(ysums[iN][val]) / counts[iN][val]
     return outmat
 
 if __name__ == "__main__":
     
     rseed       = 42
-    featDegree  = 3
-    cvN         = 5
+    featDegree  = 4
+    cvN         = 10
     ftresh      = 1
-    optAlgo     = 'PSO'
+    optAlgo     = 'GA'
     
     print("Reading data...")
     trainData = pd.read_csv(TRAIN_FILE)
@@ -139,42 +132,42 @@ if __name__ == "__main__":
     #    clusters.append(clust.Xclust)
     #np.save(DATA_DIR+'huang.npy', clusters)
     clusters = np.load(DATA_DIR+'huang.npy')
-    for cc in clusters:
+    for cc in clusters[1:]:
         allData = np.hstack((allData, np.expand_dims(cc,1)))
     
     print("Combining features...")
     # create higher-order features
-    allData = pd.DataFrame(allData)
+    allSparseData = pd.DataFrame(allData)
     if featDegree > 1:
         combData = pd.DataFrame()
         for fd in range(2,featDegree+1):
-            combData = pd.concat((combData, construct_combined_features_pd(allData, degree=fd)), ignore_index=True, axis=1)
-        allData = pd.concat((allData, combData), ignore_index=True, axis=1)
-    allData = np.array(allData)
+            combData = pd.concat((combData, construct_combined_features_pd(allSparseData, degree=fd)), ignore_index=True, axis=1)
+        allSparseData = pd.concat((allSparseData, combData), ignore_index=True, axis=1)
+    allSparseData = np.array(allSparseData)
     
     print("Performing feature selection...")
-    numFeatures = allData.shape[1]
-    cvModel = linear_model.LogisticRegression(penalty='l2', C=2.0, class_weight='auto', random_state=rseed)
+    numSparseFeatures = allSparseData.shape[1]
+    cvModel = linear_model.LogisticRegression(penalty='l2', C=4.0, class_weight='auto', random_state=rseed)
     
     # Xts holds one hots encodings for each individual feature in memory, speeding up feature selection 
-    Xts = [selective_onehotencoder(allData[:numTrain,[i]], ftresh)[0] for i in range(numFeatures)]
+    Xts = [selective_onehotencoder(allSparseData[:numTrain,[i]], ftresh)[0] for i in range(numSparseFeatures)]
     
     print("Performing greedy feature selection...")
     scoreHist = []
-    greedFeats = set([])
+    greedSparseFeats = set([])
     while len(scoreHist) < 2 or scoreHist[-1][0] > scoreHist[-2][0]:
         scores = []
         for f in range(len(Xts)):
-            if f not in greedFeats:
-                feats = list(greedFeats) + [f]
+            if f not in greedSparseFeats:
+                feats = list(greedSparseFeats) + [f]
                 Xt = sparse.hstack([Xts[j] for j in feats]).tocsr()
                 score = cv_loop(Xt, y, cvModel, cvN)
                 scores.append((score, f))
                 print("Feature: %i Mean AUC: %f" % (f, score))
-        greedFeats.add(max(scores)[1])
+        greedSparseFeats.add(max(scores)[1])
         scoreHist.append(max(scores))
-        print("Current features: %s" % sorted(list(greedFeats)))
-    greedFeats.remove(scoreHist[-1][1])
+        print("Current features: %s" % sorted(list(greedSparseFeats)))
+    greedSparseFeats.remove(scoreHist[-1][1])
     
     print("Performing smart feature selection...")
     prng = Random()
@@ -190,56 +183,53 @@ if __name__ == "__main__":
                               evaluator=evaluator_feats,
                               bounder = inspyred.ec.DiscreteBounder([0, 1]),
                               maximize=True,
-                              pop_size=40,
+                              pop_size=32,
                               max_generations=250,
-                              tournament_size=8,
-                              num_selected=100,
+                              num_selected=24,
+                              tournament_size=4,
                               num_elites=1,
-                              numFeatures=numFeatures, Xts=Xts, y=y, cvModel=cvModel,cvN=cvN
+                              numFeatures=numSparseFeatures, Xts=Xts, y=y, cvModel=cvModel,cvN=cvN
                               )
-        smartFeats = set(max(ea.population))
-    elif optAlgo == 'PSO':
-        ea = inspyred.swarm.PSO(prng)
-        ea.terminator = inspyred.ec.terminators.evaluation_termination
-        ea.topology = inspyred.swarm.topologies.ring_topology
-        final_pop = ea.evolve(generator=generator_feats,
-                              evaluator=evaluator_feats,
-                              bounder = inspyred.ec.DiscreteBounder([0, 1]),
-                              maximize=True,
-                              pop_size=10,
-                              max_generations=50,
-                              max_evaluations=30000,
-                              neighborhood_size=5,
-                              numFeatures=numFeatures, Xts=Xts, y=y, cvModel=cvModel,cvN=cvN
-                              )
-        smartFeats = set(max(ea.population))
+        smartFeats = np.nonzero(max(ea.population).candidate)[0]
     else:
-        smartFeats = set([])
+        smartFeats = []
     
-    allData = allData[:, list(greedFeats)]
+    allSparseData = allSparseData[:, list(greedSparseFeats)+smartFeats]
     
     print("Converting to one-hot...")
-    allData, _ = selective_onehotencoder(allData, ftresh)
+    allData = selective_ycoldencoder(allData, y, ftresh)
     xTrain = allData[:numTrain]
     xTest = allData[numTrain:]
+    allSparseData, _ = selective_onehotencoder(allSparseData, ftresh)
+    xSparseTrain = allSparseData[:numTrain]
+    xSparseTest = allSparseData[numTrain:]
     
     print("Training models...")
-    models = [  #ensemble.GradientBoostingClassifier(n_estimators=50, max_depth=2,
-                #min_samples_leaf=5, subsample=0.5, max_features=0.25),
-                #ensemble.RandomForestClassifier(n_estimators=50, max_depth=4,
-                #min_samples_leaf=5, max_features=0.25),
+    modelsSparse = [
                 linear_model.LogisticRegression(penalty='l1', C=2.0, fit_intercept=True,
                 intercept_scaling=1, class_weight='auto', random_state=rseed),
                 linear_model.LogisticRegression(penalty='l2', C=2.0, fit_intercept=True,
                 intercept_scaling=1, class_weight='auto', random_state=rseed),
             ]
+    models = [
+                ensemble.GradientBoostingClassifier(n_estimators=50, max_depth=2,
+                min_samples_leaf=5, subsample=0.5, max_features=0.25),
+                ensemble.RandomForestClassifier(n_estimators=50, max_depth=4,
+                min_samples_leaf=5, max_features=0.25),
+            ]
+    
+    cv = cross_validation.StratifiedShuffleSplit(y, random_state=rseed, n_iter=cvN)
+    scores = [0]*len(modelsSparse)
+    for ii in range(len(modelsSparse)):
+        scores[ii] = cross_validation.cross_val_score(modelsSparse[ii], xSparseTrain, y, scoring='roc_auc', n_jobs=1, cv=cv)
+        print("Cross-validation AUC on the training set for model %d:" % ii)
+        print("%0.3f (+/-%0.03f)" % (scores[ii].mean(), scores[ii].std() / 2))
+        
+        modelsSparse[ii].fit(xSparseTrain, y)
     
     cv = cross_validation.StratifiedShuffleSplit(y, random_state=rseed, n_iter=cvN)
     scores = [0]*len(models)
     for ii in range(len(models)):
-        if isinstance(models[ii], ensemble.GradientBoostingClassifier) or \
-            isinstance(models[ii], ensemble.RandomForestClassifier):
-            xTrain = xTrain.toarray()
         scores[ii] = cross_validation.cross_val_score(models[ii], xTrain, y, scoring='roc_auc', n_jobs=1, cv=cv)
         print("Cross-validation AUC on the training set for model %d:" % ii)
         print("%0.3f (+/-%0.03f)" % (scores[ii].mean(), scores[ii].std() / 2))
@@ -249,9 +239,6 @@ if __name__ == "__main__":
     print("Making prediction...")
     preds = []
     for ii in range(len(models)):
-        if isinstance(models[ii], ensemble.GradientBoostingClassifier) or \
-            isinstance(models[ii], ensemble.RandomForestClassifier):
-            xTest = xTest.toarray()
         preds.append(models[ii].predict_proba(xTest)[:,1])
     
     create_submission(np.mean(np.array(preds), axis=0), DATA_DIR+'submission.csv')
