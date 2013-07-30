@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 
 '''
-Implementation of the k-modes clustering algorithm.
+Implementation of traditional and fuzzy k-modes clustering algorithms.
 '''
 __author__  = 'Nico de Vos'
 __email__   = 'njdevos@gmail.com'
 __license__ = 'MIT'
-__version__ = '0.3'
+__version__ = '0.4'
 
 import random
 import numpy as np
