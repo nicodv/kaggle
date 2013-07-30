@@ -268,7 +268,7 @@ class FuzzyKModes(KModes):
 
 ################################################################################
 
-class FuzzyFuzzyKModes(FuzzyKModes):
+class FuzzyFuzzyKModes(KModes):
     
     def __init__(self, k, alpha=1.5):
         '''Fuzzy k-modes clustering algorithm for categorical data.
@@ -432,12 +432,12 @@ if __name__ == "__main__":
     kmodes_huang.cluster(X, init='Huang')
     kmodes_cao = KModes(4)
     kmodes_cao.cluster(X, init='Cao')
-    fkmodes_hard = FuzzyKModes(4, alpha=1.1)
-    fkmodes_hard.cluster(X)
-    #fkmodes_fuzzy = FuzzyFuzzyKModes(4, alpha=1.8)
-    #fkmodes_fuzzy.cluster(X)
+    fkmodes = FuzzyKModes(4, alpha=1.1)
+    fkmodes.cluster(X)
+    ffkmodes = FuzzyFuzzyKModes(4, alpha=1.8)
+    ffkmodes.cluster(X)
     
-    for result in (kmodes_huang, kmodes_cao, fkmodes_hard):
+    for result in (kmodes_huang, kmodes_cao, fkmodes, ffkmodes):
         classtable = np.zeros((4,4), dtype='int64')
         for ii,_ in enumerate(y):
             classtable[int(y[ii][-1])-1,result.Xclust[ii]] += 1
