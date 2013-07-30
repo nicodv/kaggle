@@ -22,7 +22,8 @@ class KModes(object):
         Inputs:     k       = number of clusters
         Attributes: Xclust  = cluster numbers [no. points]
                     cent    = centroids [k * no. attributes]
-                    cost    = clustering cost
+                    cost    = clustering cost, defined as the sum distance of
+                              all points to their respective clusters
         
         '''
         assert k > 1, "Choose at least 2 clusters."
@@ -45,7 +46,7 @@ class KModes(object):
         #    INIT
         # ----------------------
         print("Init: initializing centroids")
-        cent = self._init_centroids(X)
+        cent = self.init_centroids(X)
         
         print("Init: initializing clusters")
         member = np.zeros((self.k, N), dtype='int32')
@@ -103,7 +104,7 @@ class KModes(object):
         self.Xclust = np.array([int(np.argwhere(member[:,x])) for x in range(N)])
         self.member = member
     
-    def _init_centroids(self, X):
+    def init_centroids(self, X):
         assert self.init in ('Huang', 'Cao')
         N, at = X.shape
         cent = np.empty((self.k, at))
@@ -161,14 +162,11 @@ class KModes(object):
         # simple matching dissimilarity
         return (A != b).sum(axis=1)
     
-    def clustering_cost(self, X, cent, member):
-        '''Clustering cost, defined as the sum distance of all points
-        to their respective clusters.
-        
-        '''
+    def clustering_cost(self, X, cent, member, alpha=1):
+        # generalized form with alpha. alpha > 1 for fuzzy k-modes
         cost = 0
-        for ic, curc in enumerate(cent):
-            cost += self.get_dissim(X[np.where(member[ic])], curc).sum()
+        for iN, curx in enumerate(X):
+            cost += np.sum( self.get_dissim(cent, curx) * (member[:,iN] ** self.alpha) )
         return cost
 
 ################################################################################
@@ -177,10 +175,10 @@ class FuzzyKModes(KModes):
     
     def __init__(self, k, alpha=1.5):
         '''Fuzzy k-modes clustering algorithm for categorical data.
-        See Huang and Ng [1999] and Kim et al. [2004].
+        Uses traditional, hard centroids, following Huang and Ng [1999].
         
-        Inputs:     k       = number of clusters
-                    alpha   = alpha coefficient
+        Inputs:     k           = number of clusters
+                    alpha       = alpha coefficient
         Attributes: Xclust  = cluster numbers with max. membership [no. points]
                     member  = membership matrix [k * no. points]
                     cent    = centroids [k * no. attributes]
@@ -192,16 +190,13 @@ class FuzzyKModes(KModes):
         assert alpha > 1, "alpha should be > 1 (alpha = 1 equals regular k-modes)."
         self.alpha = alpha
     
-    def cluster(self, X, init='Huang', centType='fuzzy', maxIters=200, costInter=5, verbose=1):
+    def cluster(self, X, init='Huang', maxIters=200, costInter=5, verbose=1):
         '''Inputs:  X           = data points [no. attributes * no. points]
                     init        = initialization method ('Huang' for the one described in
                                   Huang [1998], 'Cao' for the one in Cao et al. [2009]).
-                    centType    = centroid type ('hard' for traditional, hard
-                                  centroids [Huang and Ng, 1999] or 'fuzzy' for
-                                  fuzzy centroids [Kim et al., 2004])
                     maxIters    = maximum no. of iterations
                     costInter   = frequency with which to check the total cost
-                                  (this is computationally expensive, so this speeds things up)
+                                  (for speeding things up, since it is computationally expensive)
         
         '''
         
@@ -210,33 +205,17 @@ class FuzzyKModes(KModes):
         N, at = X.shape
         assert self.k < N, "More clusters than data points?"
         
-        self.init = init
-        assert centType in ('hard','fuzzy')
-        self.centType = centType
-        
         # ----------------------
         #    INIT
         # ----------------------
         print("Init: initializing centroids")
-        cent = self._init_centroids(X)
+        cent = self.init_centroids(X)
         
         # store for all attributes which points have a certain attribute value
-        domAt = [defaultdict(list) for _ in range(at)]
+        domAtX = [defaultdict(list) for _ in range(at)]
         for iN, curx in enumerate(X):
             for iat, val in enumerate(curx):
-                domAt[iat][val].append(iN)
-        
-        if centType == 'fuzzy':
-            # omega = fuzzy set (as dict) for each attribute per cluster
-            omega = [[{} for _ in range(at)] for _ in range(self.k)]
-            for ik in range(self.k):
-                for iat in range(at):
-                    rands = np.random.rand(len(domAt[iat]))
-                    rands = rands / sum(rands)
-                    for ival, val in enumerate(domAt[iat]):
-                        omega[ik][iat][val] = rands[ival]
-        elif centType == 'hard':
-            omega = None
+                domAtX[iat][val].append(iN)
         
         # ----------------------
         #    ITERATION
@@ -246,13 +225,13 @@ class FuzzyKModes(KModes):
         converged = False
         lastCost = np.inf
         while itr <= maxIters and not converged:
-            member = self._update_membership(cent, X, omega)
+            member = self.update_membership(cent, X)
             for ik in range(self.k):
-                for iat in range(at):
-                    cent[ik][iat] = self._update_centroid(domAt[iat], member[ik])
+                cent[ik] = self.update_centroid(domAtX, member[ik])
+            
             # computationally expensive, only check every N steps
             if itr % costInter == 0:
-                cost = self.clustering_cost(X, cent, member, omega)
+                cost = self.clustering_cost(X, cent, member)
                 converged = cost >= lastCost
                 lastCost = cost
                 if verbose:
@@ -264,14 +243,11 @@ class FuzzyKModes(KModes):
         self.Xclust = np.array([int(np.argmax(member[:,x])) for x in range(N)])
         self.member = member
     
-    def _update_membership(self, cent, X, omega):
+    def update_membership(self, cent, X):
         N = X.shape[0]
         member = np.empty((self.k, N))
         for iN, curx in enumerate(X):
-            if self.centType == 'hard':
-                dissim = self.get_dissim(cent, curx)
-            elif self.centType == 'fuzzy':
-                dissim = self.get_fuzzy_dissim(cent, curx, omega)
+            dissim = self.get_dissim(cent, curx)
             if np.any(dissim == 0):
                 member[:,iN] = np.where(dissim == 0, 1, 0)
             else:
@@ -280,30 +256,128 @@ class FuzzyKModes(KModes):
                     member[ik,iN] = 1 / np.sum( (float(dissim[ik]) / dissim)**factor )
         return member
     
-    def _update_centroid(self, domAt, member):
-        if self.centType == 'hard':
+    def update_centroid(self, domAtX, member):
+        cent = []
+        for iat in range(len(domAtX)):
             # return attribute that maximizes the sum of the memberships
-            v = list(domAt.values())
-            k = list(domAt.keys())
+            v = list(domAtX[iat].values())
+            k = list(domAtX[iat].keys())
             memvar = [sum(member[x]**self.alpha) for x in v]
-            return k[np.argmax(memvar)]
-        elif self.centType == 'fuzzy':
-            pass
+            cent.append(k[np.argmax(memvar)])
+        return np.array(cent)
+
+################################################################################
+
+class FuzzyFuzzyKModes(FuzzyKModes):
     
-    def get_fuzzy_dissim(self, A, b, omega):
-        dist = 0
-        for ik in range(len(A)):
-            for iat, val in enumerate(b):
-                dist += sum( np.where(A[iat] == b[iat], 0, omega[ik][iat][val]) )
+    def __init__(self, k, alpha=1.5):
+        '''Fuzzy k-modes clustering algorithm for categorical data.
+        Uses fuzzy centroids, following and Kim et al. [2004].
+        
+        Inputs:     k           = number of clusters
+                    alpha       = alpha coefficient
+        Attributes: Xclust  = cluster numbers with max. membership [no. points]
+                    member  = membership matrix [k * no. points]
+                    omega   = fuzzy centroids
+                    cost    = clustering cost
+        
+        '''
+        super(FuzzyFuzzyKModes, self).__init__(k)
+        
+        assert alpha > 1, "alpha should be > 1 (alpha = 1 equals regular k-modes)."
+        self.alpha = alpha
+    
+    def cluster(self, X, maxIters=200, costInter=5, verbose=1):
+        '''Inputs:  X           = data points [no. attributes * no. points]
+                    maxIters    = maximum no. of iterations
+                    costInter   = frequency with which to check the total cost
+                                  (for speeding things up, since it is computationally expensive)
+        
+        '''
+        
+        # convert to numpy array, if needed
+        X = np.asanyarray(X)
+        N, at = X.shape
+        assert self.k < N, "More clusters than data points?"
+        
+        # ----------------------
+        #    INIT
+        # ----------------------
+        # count all attributes
+        freqAt = [defaultdict(int) for _ in range(at)]
+        for curx in X:
+            for iat, val in enumerate(curx):
+                freqAt[iat][val] += 1
+        
+        # omega = fuzzy set (as dict) for each attribute per cluster
+        omega = [[{} for _ in range(at)] for _ in range(self.k)]
+        for ik in range(self.k):
+            for iat in range(at):
+                rands = np.random.rand(len(freqAt[iat]))
+                # to make sum omegas = 1 per attribute
+                rands = rands / sum(rands)
+                for ival, val in enumerate(freqAt[iat]):
+                    omega[ik][iat][val] = rands[ival]
+        
+        # ----------------------
+        #    ITERATION
+        # ----------------------
+        print("Starting iterations...")
+        itr = 0
+        converged = False
+        lastCost = np.inf
+        while itr <= maxIters and not converged:
+            # O(k*N*at*no. of unique values)
+            member = self.update_membership(X, omega)
+            # O(k*N*at)
+            for ik in range(self.k):
+                omega[ik] = self.update_centroid(X, member[ik])
+            
+            # computationally expensive, only check every N steps
+            if itr % costInter == 0:
+                cost = self.clustering_cost(X, member, omega)
+                converged = cost >= lastCost
+                lastCost = cost
+                if verbose:
+                    print("Iteration: {0}/{1}, cost: {2}".format(itr, maxIters, cost))
+            itr += 1
+        
+        self.cost = cost
+        self.omega = omega
+        self.Xclust = np.array([int(np.argmax(member[:,x])) for x in range(N)])
+        self.member = member
+    
+    def update_membership(self, X, omega):
+        N = X.shape[0]
+        member = np.empty((self.k, N))
+        for iN, curx in enumerate(X):
+            dissim = self.get_fuzzy_dissim(omega, curx)
+            if np.any(dissim == 0):
+                member[:,iN] = np.where(dissim == 0, 1, 0)
+            else:
+                for ik, curc in enumerate(omega):
+                    factor = 1. / (self.alpha - 1)
+                    member[ik,iN] = 1 / np.sum( (float(dissim[ik]) / dissim)**factor )
+        return member
+    
+    def update_centroid(self, X, member):
+        omega = [defaultdict(float) for _ in range(X.shape[1])]
+        for iN, curx in enumerate(X):
+            for iat, val in enumerate(curx):
+                omega[iat][val] += member[iN] ** self.alpha
+        return omega
+    
+    def get_fuzzy_dissim(self, omega, x):
+        dist = np.zeros(len(omega))
+        for ik in curo in enumerate(omega):
+            for iat, val in enumerate(curo):
+                dist[ik] += sum( np.where(val == b[iat], 0, omega[ik][iat][val]) )
         return dist
     
-    def clustering_cost(self, X, cent, member, omega):
+    def clustering_cost(self, X, omega, member):
         cost = 0
         for iN, curx in enumerate(X):
-            if self.centType == 'hard':
-                cost += np.sum( self.get_dissim(cent, curx) * (member[:,iN] ** self.alpha) )
-            elif self.centType == 'fuzzy':
-                cost += np.sum( self.get_fuzzy_dissim(cent, curx, omega) * (member[:,iN] ** self.alpha) )
+            cost += np.sum( self.get_fuzzy_dissim(omega, curx) * (member[:,iN] ** self.alpha) )
         return cost
 
 
@@ -359,9 +433,9 @@ if __name__ == "__main__":
     kmodes_cao = KModes(4)
     kmodes_cao.cluster(X, init='Cao')
     fkmodes_hard = FuzzyKModes(4, alpha=1.1)
-    fkmodes_hard.cluster(X, init='Huang', centType='hard')
-    #fkmodes_fuzzy = FuzzyKModes(4, alpha=1.1)
-    #fkmodes_fuzzy.cluster(X, init='Huang', centType='fuzzy')
+    fkmodes_hard.cluster(X)
+    #fkmodes_fuzzy = FuzzyFuzzyKModes(4, alpha=1.8)
+    #fkmodes_fuzzy.cluster(X)
     
     for result in (kmodes_huang, kmodes_cao, fkmodes_hard):
         classtable = np.zeros((4,4), dtype='int64')
