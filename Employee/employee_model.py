@@ -8,8 +8,6 @@ from sklearn import preprocessing, cross_validation, ensemble, linear_model
 from scipy import sparse
 from collections import defaultdict
 from Employee import kmodes
-from random import Random
-import inspyred
 
 
 DATA_DIR = '/home/nico/datasets/Kaggle/Employee/'
@@ -109,9 +107,9 @@ def selective_ycoldencoder(data, y, ftresh):
 if __name__ == "__main__":
     
     rseed       = 42
-    featDegree  = 4
+    featDegree  = 2
     cvN         = 10
-    ftresh      = 1
+    ftresh      = 0
     optAlgo     = 'GA'
     
     print("Reading data...")
@@ -168,54 +166,40 @@ if __name__ == "__main__":
         scoreHist.append(max(scores))
         print("Current features: %s" % sorted(list(greedSparseFeats)))
     greedSparseFeats.remove(scoreHist[-1][1])
-    
-    print("Performing smart feature selection...")
-    prng = Random()
-    prng.seed(rseed)
-    if optAlgo == 'GA':
-        ea = inspyred.ec.EvolutionaryComputation(prng)
-        ea.selector = inspyred.ec.selectors.tournament_selection
-        ea.variator = [inspyred.ec.variators.partially_matched_crossover, 
-                       inspyred.ec.variators.inversion_mutation]
-        ea.replacer = inspyred.ec.replacers.generational_replacement
-        ea.terminator = inspyred.ec.terminators.generation_termination
-        final_pop = ea.evolve(generator=generator_feats,
-                              evaluator=evaluator_feats,
-                              bounder = inspyred.ec.DiscreteBounder([0, 1]),
-                              maximize=True,
-                              pop_size=32,
-                              max_generations=250,
-                              num_selected=24,
-                              tournament_size=4,
-                              num_elites=1,
-                              numFeatures=numSparseFeatures, Xts=Xts, y=y, cvModel=cvModel,cvN=cvN
-                              )
-        smartFeats = np.nonzero(max(ea.population).candidate)[0]
-    else:
-        smartFeats = []
-    
-    allSparseData = allSparseData[:, list(greedSparseFeats)+smartFeats]
+    #tresh=1, degree=4, huangclusters[1:] --> 0.89
+    #greedSparseFeats = [0, 8, 78, 86, 88, 111, 113, 122, 169, 263, 302, 310, 336, 345, 356, 357, 368, 384, 396, 418, 424, 449, 506, 527, 533, 621, 711]
+    #tresh=1, degree=2, huangcluster[1:] --> 0.88
+    #greedSparseFeats = [0, 8, 12, 14, 15, 16, 22, 27, 30, 32, 57, 67]
+    allSparseData = allSparseData[:, list(greedSparseFeats)]
     
     print("Converting to one-hot...")
-    allData = selective_ycoldencoder(allData, y, ftresh)
-    xTrain = allData[:numTrain]
-    xTest = allData[numTrain:]
     allSparseData, _ = selective_onehotencoder(allSparseData, ftresh)
     xSparseTrain = allSparseData[:numTrain]
     xSparseTest = allSparseData[numTrain:]
+    allData = selective_ycoldencoder(allData, y, ftresh)
+    xTrain = allData[:numTrain]
+    xTest = allData[numTrain:]
     
     print("Training models...")
     modelsSparse = [
-                linear_model.LogisticRegression(penalty='l1', C=2.0, fit_intercept=True,
-                intercept_scaling=1, class_weight='auto', random_state=rseed),
-                linear_model.LogisticRegression(penalty='l2', C=2.0, fit_intercept=True,
-                intercept_scaling=1, class_weight='auto', random_state=rseed),
+                linear_model.LogisticRegression(penalty='l2', C=1.0, fit_intercept=False,
+                class_weight='auto', random_state=rseed),
+                linear_model.LogisticRegression(penalty='l2', C=2.0, fit_intercept=False,
+                class_weight='auto', random_state=rseed),
+                linear_model.LogisticRegression(penalty='l2', C=4.0, fit_intercept=True,
+                class_weight='auto', random_state=rseed),
+                linear_model.LogisticRegression(penalty='l2', C=8.0, fit_intercept=True,
+                class_weight='auto', random_state=rseed),
+                linear_model.LogisticRegression(penalty='l2', C=12.0, fit_intercept=True,
+                class_weight='auto', random_state=rseed)
             ]
     models = [
-                ensemble.GradientBoostingClassifier(n_estimators=50, max_depth=2,
+                ensemble.GradientBoostingClassifier(n_estimators=50, max_depth=4,
                 min_samples_leaf=5, subsample=0.5, max_features=0.25),
-                ensemble.RandomForestClassifier(n_estimators=50, max_depth=4,
-                min_samples_leaf=5, max_features=0.25),
+                ensemble.GradientBoostingClassifier(n_estimators=100, max_depth=3,
+                min_samples_leaf=10, subsample=0.5, max_features=0.25),
+                ensemble.GradientBoostingClassifier(n_estimators=200, max_depth=2,
+                min_samples_leaf=20, subsample=0.5, max_features=0.25),
             ]
     
     cv = cross_validation.StratifiedShuffleSplit(y, random_state=rseed, n_iter=cvN)
@@ -244,3 +228,27 @@ if __name__ == "__main__":
     create_submission(np.mean(np.array(preds), axis=0), DATA_DIR+'submission.csv')
     
     print("Done.")
+
+#import inspyred
+#from random import Random
+#print("Performing smart feature selection...")
+#prng = Random()
+#prng.seed(rseed)
+#ea = inspyred.ec.EvolutionaryComputation(prng)
+#ea.selector = inspyred.ec.selectors.tournament_selection
+#ea.variator = [inspyred.ec.variators.partially_matched_crossover, 
+#               inspyred.ec.variators.inversion_mutation]
+#ea.replacer = inspyred.ec.replacers.generational_replacement
+#ea.terminator = inspyred.ec.terminators.generation_termination
+#final_pop = ea.evolve(generator=generator_feats,
+#                      evaluator=evaluator_feats,
+#                      bounder = inspyred.ec.DiscreteBounder([0, 1]),
+#                      maximize=True,
+#                      pop_size=32,
+#                      max_generations=250,
+#                      num_selected=24,
+#                      tournament_size=4,
+#                      num_elites=1,
+#                      numFeatures=numSparseFeatures, Xts=Xts, y=y, cvModel=cvModel,cvN=cvN
+#                      )
+#smartFeats = np.nonzero(max(ea.population).candidate)[0]
