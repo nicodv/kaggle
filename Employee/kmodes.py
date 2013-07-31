@@ -236,7 +236,7 @@ class FuzzyKModes(KModes):
             # computationally expensive, only check every N steps
             if itr % costInter == 0:
                 cost = self.clustering_cost(X, cent, member)
-                converged = cost >= lastCost
+                converged = cost >= lastCost * 0.9999
                 lastCost = cost
                 if verbose:
                     print("Iteration: {0}/{1}, cost: {2}".format(itr, maxIters, cost))
@@ -340,7 +340,7 @@ class FuzzyFuzzyKModes(KModes):
             # computationally expensive, only check every N steps
             if itr % costInter == 0:
                 cost = self.clustering_cost(X, member, omega)
-                converged = cost >= lastCost
+                converged = cost >= lastCost * 0.9999
                 lastCost = cost
                 if verbose:
                     print("Iteration: {0}/{1}, cost: {2}".format(itr, maxIters, cost))
@@ -370,7 +370,7 @@ class FuzzyFuzzyKModes(KModes):
             for iat in range(X.shape[1]):
                 for iN, curx in enumerate(X[:,iat]):
                     omega[ik][iat][curx] += member[ik,iN] ** self.alpha
-                # normalize (see Yang et al. [2008])
+                # normalize (see Yang et al. [2008] for clearer explanation)
                 somomg = sum(omega[ik][iat].values())
                 for k in omega[ik][iat].keys():
                     omega[ik][iat][k] /= somomg
@@ -380,7 +380,8 @@ class FuzzyFuzzyKModes(KModes):
         dist = np.zeros(len(omega))
         for ik in range(len(omega)):
             for iat in range(len(omega[ik])):
-                dist[ik] += omega[ik][iat][x[iat]]
+                nonMatch = [v for k, v in omega[ik][iat].items() if k != x[iat]]
+                dist[ik] += sum(nonMatch)
         return dist
     
     def clustering_cost(self, X, member, omega):
