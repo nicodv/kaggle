@@ -17,7 +17,9 @@ class KModes(object):
     
     def __init__(self, k):
         '''k-modes clustering algorithm for categorical data.
-        See Huang [1997, 1998] or Chaturvedi et al. [2001].
+        See:
+        Huang, Z.: Extensions to the k-modes algorithm for clustering large data sets with
+        categorical values, Data Mining and Knowledge Discovery 2(3), 1998.
         
         Inputs:     k       = number of clusters
         Attributes: Xclust  = cluster numbers [no. points]
@@ -28,6 +30,9 @@ class KModes(object):
         '''
         assert k > 1, "Choose at least 2 clusters."
         self.k = k
+        
+        # generalized form with alpha. alpha > 1 for fuzzy k-modes
+        self.alpha = 1
     
     def cluster(self, X, init='Huang', maxIters=100, verbose=1):
         '''Inputs:  X           = data points [no. attributes * no. points]
@@ -42,9 +47,6 @@ class KModes(object):
         
         self.init = init
         
-        # generalized form with alpha. alpha > 1 for fuzzy k-modes
-        self.alpha = 1
-        
         # ----------------------
         #    INIT
         # ----------------------
@@ -52,15 +54,15 @@ class KModes(object):
         cent = self.init_centroids(X)
         
         print("Init: initializing clusters")
-        member = np.zeros((self.k, N), dtype='int32')
+        member = np.zeros((self.k, N), dtype='int64')
         # clustFreq is a list of lists with dictionaries that contain the
         # frequencies of values per cluster and attribute
         clustFreq = [[defaultdict(int) for _ in range(at)] for _ in range(self.k)]
-        for ix, curx in enumerate(X):
+        for iN, curx in enumerate(X):
             # initial assigns to clusters
             dissim = self.get_dissim(cent, curx)
             cluster = np.argmin(dissim)
-            member[cluster,ix] = 1
+            member[cluster,iN] = 1
             # count attribute values per cluster
             for iat, val in enumerate(curx):
                 clustFreq[cluster][iat][val] += 1
@@ -78,15 +80,15 @@ class KModes(object):
         while itr <= maxIters and not converged:
             itr += 1
             moves = 0
-            for ix, curx in enumerate(X):
+            for iN, curx in enumerate(X):
                 dissim = self.get_dissim(cent, curx)
                 cluster = np.argmin(dissim)
                 # if necessary: move point, and update old/new cluster frequencies and centroids
-                if not member[cluster, ix]:
+                if not member[cluster, iN]:
                     moves += 1
-                    oldcluster = np.argwhere(member[:,ix])
-                    member[oldcluster,ix] = 0
-                    member[cluster,ix] = 1
+                    oldcluster = np.argwhere(member[:,iN])
+                    member[oldcluster,iN] = 0
+                    member[cluster,iN] = 1
                     for iat, val in enumerate(curx):
                         # update frequencies of attributes in clusters
                         clustFreq[cluster][iat][val] += 1
@@ -173,11 +175,143 @@ class KModes(object):
 
 ################################################################################
 
+class KPrototypes(KModes):
+    
+    def __init__(self, k):
+        '''k-protoypes clustering algorithm for mixed numeric and categorical data.
+        See:
+        Huang, Z.: Clustering large data sets with mixed numeric and categorical values,
+        Proceedings of the First Pacific Asia Knowledge Discovery and Data Mining Conference,
+        Singapore: World Scientific, pp. 21–34, 1997.
+        
+        Inputs:     k       = number of clusters
+        Attributes: Xclust  = cluster numbers [no. points]
+                    cent    = centroids, two lists (num. and cat.) with [k * no. attributes]
+                    cost    = clustering cost, defined as the sum distance of
+                              all points to their respective clusters
+        
+        '''
+        super(KPrototypes, self).__init__(k)
+    
+    def cluster(self, Xnum, Xcat, init='Huang', maxIters=100, verbose=1):
+        '''Inputs:  Xnum        = numeric data points [no. numeric attributes * no. points]
+                    Xcat        = categorical data points [no. numeric attributes * no. points]
+                    init        = initialization method ('Huang' for the one described in
+                                  Huang [1998], 'Cao' for the one in Cao et al. [2009])
+                    maxIters    = maximum no. of iterations
+        '''
+        # convert to numpy arrays, if needed
+        Xnum = np.asanyarray(Xnum)
+        Xcat = np.asanyarray(Xcat)
+        Nnum, atnum = Xnum.shape
+        Ncat, atcat = Xcat.shape
+        assert Nnum == Ncat, "More numerical points than categorical?"
+        N = Nnum
+        assert self.k < Nnum, "More clusters than data points?"
+        
+        self.init = init
+        
+        # initial value for gamma, which determines the weighing of
+        # categorical values in clusters
+        gamma = np.repeat(np.std(Xnum),self.k)
+        
+        # ----------------------
+        #    INIT
+        # ----------------------
+        print("Init: initializing centroids")
+        cent = [np.mean(Xnum, axis=1) + np.random.randn((k, at)) * np.std(Xnum, axis=1)][self.init_centroids(Xcat)]
+        
+        print("Init: initializing clusters")
+        member = np.zeros((self.k, N), dtype='int64')
+        # keep track of the sum of attribute values per cluster
+        clustSum = np.array((self.k, at))
+        # clustFreq is a list of lists with dictionaries that contain the
+        # frequencies of values per cluster and attribute
+        clustFreq = [[defaultdict(int) for _ in range(at)] for _ in range(self.k)]
+        for iN in range(N):
+            # initial assigns to clusters
+            dissim = self.get_dissim_num(cent[0], Xnum[iN]) + gamma * self.get_dissim_cat(cent[1], Xcat[iN])
+            cluster = np.argmin(dissim)
+            member[cluster,iN] = 1
+            # count attribute values per cluster
+            for iat, val in enumerate(Xnum[iN]):
+                clustSum[cluster,iat] += val
+            for iat, val in enumerate(Xcat[iN]):
+                clustFreq[cluster][iat][val] += 1
+        # perform an initial centroid update
+        for ik in range(self.k):
+            for iat in range(at):
+                cent[0][ik,iat] = clustSum[ik,iat] / sum(member[ik,:])
+                cent[1][ik,iat] = key_for_max_value(clustFreq[ik][iat])
+        
+        # ----------------------
+        #    ITERATION
+        # ----------------------
+        print("Starting iterations...")
+        itr = 0
+        converged = False
+        while itr <= maxIters and not converged:
+            itr += 1
+            moves = 0
+            for iN in range(N):
+                dissim = self.get_dissim_num(cent[0], Xnum[iN]) + gamma * self.get_dissim_cat(cent[1], Xcat[iN])
+                cluster = np.argmin(dissim)
+                # if necessary: move point, and update old/new cluster frequencies and centroids
+                if not member[cluster, iN]:
+                    moves += 1
+                    oldcluster = np.argwhere(member[:,iN])
+                    member[oldcluster,iN] = 0
+                    member[cluster,iN] = 1
+                    for iat, val in enumerate(Xnum[iN]):
+                        clustSum[cluster,iat] += val
+                        clustSum[oldcluster,iat] -= val
+                        for curc in (cluster, oldcluster):
+                            cent[0][curc, iat] = clustSum[ik,iat] / sum(member[curc,:])
+                    for iat, val in enumerate(Xcat[iN]):
+                        # update frequencies of attributes in clusters
+                        clustFreq[cluster][iat][val] += 1
+                        clustFreq[oldcluster][iat][val] -= 1
+                        # update new and old centroids by choosing most likely attribute
+                        for curc in (cluster, oldcluster):
+                            cent[1][curc, iat] = key_for_max_value(clustFreq[curc][iat])
+                    if verbose == 2:
+                        print("Move from cluster {0} to {1}".format(oldcluster, cluster))
+            
+            # all points seen in this iteration
+            converged = (moves == 0)
+            if verbose:
+                print("Iteration: {0}/{1}, moves: {2}".format(itr, maxIters, moves))
+        
+        self.cost = self.clustering_cost(X, cent, member)
+        self.cent = cent
+        self.Xclust = np.array([int(np.argwhere(member[:,x])) for x in range(N)])
+        self.member = member
+    
+    def get_dissim_num(self, Anum, b):
+        # Euclidian distance
+        return np.sum((Anum - b)**2, axis=1)
+    
+    def get_dissim_cat(self, Acat, b):
+        # simple matching dissimilarity
+        return  np.sum(Acat != b,axis=1)
+    
+    def clustering_cost(self, X, cent, member, gamma):
+        cost = 0
+        for iN, curx in enumerate(Xnum):
+            ncost += np.sum( self.get_dissim_num(cent, curx) * (member[:,iN] ** self.alpha) )
+        for iN, curx in enumerate(Xcat):
+            ncost += np.sum( self.get_dissim_cat(cent, curx) * (member[:,iN] ** self.alpha) )
+        return ncost + gamma * ccost
+
+################################################################################
+
 class FuzzyKModes(KModes):
     
     def __init__(self, k, alpha=1.5):
         '''Fuzzy k-modes clustering algorithm for categorical data.
-        Uses traditional, hard centroids, following Huang and Ng [1999].
+        Uses traditional, hard centroids, following Huang, Z., Ng, M.K.:
+        A fuzzy k-modes algorithm for clustering categorical data, 
+        IEEE Transactions on Fuzzy Systems 7(4), 1999.
         
         Inputs:     k           = number of clusters
                     alpha       = alpha coefficient
@@ -277,13 +411,17 @@ class FuzzyFuzzyKModes(KModes):
     
     def __init__(self, k, alpha=1.5):
         '''Fuzzy k-modes clustering algorithm for categorical data.
-        Uses fuzzy centroids, following and Kim et al. [2004].
+        Uses fuzzy centroids, following and Kim, D.-W., Lee, K.H., Lee, D.:
+        Fuzzy clustering of categorical data using fuzzy centroids, Pattern
+        Recognition Letters 25, 1262-1271, 2004.
         
         Inputs:     k           = number of clusters
                     alpha       = alpha coefficient
         Attributes: Xclust  = cluster numbers with max. membership [no. points]
                     member  = membership matrix [k * no. points]
-                    omega   = fuzzy centroids
+                    omega   = fuzzy centroids [dicts with element values as keys,
+                              element memberships as values, inside lists for 
+                              attributes inside list for centroids]
                     cost    = clustering cost
         
         '''
@@ -394,7 +532,7 @@ class FuzzyFuzzyKModes(KModes):
 
 
 def key_for_max_value(d):
-    #Very fast method (supposedly) to get key for maximum value in dict.
+    # Fast method (supposedly) to get key for maximum value in dict.
     v = list(d.values())
     k = list(d.keys())
     return k[v.index(max(v))]
