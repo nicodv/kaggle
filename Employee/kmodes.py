@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 
 '''
-Implementation of traditional and fuzzy k-modes clustering algorithms.
+Implementation of the k-modes clustering algorithm and several of its variations.
 '''
 __author__  = 'Nico de Vos'
 __email__   = 'njdevos@gmail.com'
 __license__ = 'MIT'
-__version__ = '0.4'
+__version__ = '0.5'
 
 import random
 import numpy as np
@@ -35,7 +35,7 @@ class KModes(object):
         self.alpha = 1
     
     def cluster(self, X, init='Huang', maxIters=100, verbose=1):
-        '''Inputs:  X           = data points [no. attributes * no. points]
+        '''Inputs:  X           = data points [no. points * no. attributes]
                     init        = initialization method ('Huang' for the one described in
                                   Huang [1998], 'Cao' for the one in Cao et al. [2009])
                     maxIters    = maximum no. of iterations
@@ -193,9 +193,11 @@ class KPrototypes(KModes):
         '''
         super(KPrototypes, self).__init__(k)
     
-    def cluster(self, Xnum, Xcat, init='Huang', maxIters=100, verbose=1):
-        '''Inputs:  Xnum        = numeric data points [no. numeric attributes * no. points]
-                    Xcat        = categorical data points [no. numeric attributes * no. points]
+    def cluster(self, Xnum, Xcat, gamma=None, init='Huang', maxIters=100, verbose=1):
+        '''Inputs:  Xnum        = numeric data points [no. points * no. numeric attributes]
+                    Xcat        = categorical data points [no. points * no. numeric attributes]
+                    gamma       = weighing factor that determines relative importance of
+                                  num./cat. attributes (see discussion in Huang [1997])
                     init        = initialization method ('Huang' for the one described in
                                   Huang [1998], 'Cao' for the one in Cao et al. [2009])
                     maxIters    = maximum no. of iterations
@@ -211,20 +213,22 @@ class KPrototypes(KModes):
         
         self.init = init
         
-        # initial value for gamma, which determines the weighing of
-        # categorical values in clusters
-        gamma = np.repeat(np.std(Xnum),self.k)
+        # estimate a good value for gamma, which determines the weighing of
+        # categorical values in clusters (see Huang [1997])
+        if gamma is None:
+            gamma = 0.5 * np.std(Xnum)
         
         # ----------------------
         #    INIT
         # ----------------------
         print("Init: initializing centroids")
-        cent = [np.mean(Xnum, axis=1) + np.random.randn((k, at)) * np.std(Xnum, axis=1)][self.init_centroids(Xcat)]
+        cent = [np.mean(Xnum, axis=1) + np.random.randn((k, at)) * np.std(Xnum, axis=1), 
+                self.init_centroids(Xcat)]
         
         print("Init: initializing clusters")
         member = np.zeros((self.k, N), dtype='int64')
         # keep track of the sum of attribute values per cluster
-        clustSum = np.array((self.k, at))
+        clustSum = np.zeros((self.k, at), dtype='float')
         # clustFreq is a list of lists with dictionaries that contain the
         # frequencies of values per cluster and attribute
         clustFreq = [[defaultdict(int) for _ in range(at)] for _ in range(self.k)]
@@ -313,8 +317,8 @@ class FuzzyKModes(KModes):
         A fuzzy k-modes algorithm for clustering categorical data, 
         IEEE Transactions on Fuzzy Systems 7(4), 1999.
         
-        Inputs:     k           = number of clusters
-                    alpha       = alpha coefficient
+        Inputs:     k       = number of clusters
+                    alpha   = alpha coefficient
         Attributes: Xclust  = cluster numbers with max. membership [no. points]
                     member  = membership matrix [k * no. points]
                     cent    = centroids [k * no. attributes]
@@ -327,7 +331,7 @@ class FuzzyKModes(KModes):
         self.alpha = alpha
         
     def cluster(self, X, init='Huang', maxIters=200, tol=0.001, costInter=1, verbose=1):
-        '''Inputs:  X           = data points [no. attributes * no. points]
+        '''Inputs:  X           = data points [no. points * no. attributes]
                     init        = initialization method ('Huang' for the one described in
                                   Huang [1998], 'Cao' for the one in Cao et al. [2009]).
                     maxIters    = maximum no. of iterations
@@ -415,8 +419,8 @@ class FuzzyFuzzyKModes(KModes):
         Fuzzy clustering of categorical data using fuzzy centroids, Pattern
         Recognition Letters 25, 1262-1271, 2004.
         
-        Inputs:     k           = number of clusters
-                    alpha       = alpha coefficient
+        Inputs:     k       = number of clusters
+                    alpha   = alpha coefficient
         Attributes: Xclust  = cluster numbers with max. membership [no. points]
                     member  = membership matrix [k * no. points]
                     omega   = fuzzy centroids [dicts with element values as keys,
@@ -431,7 +435,7 @@ class FuzzyFuzzyKModes(KModes):
         self.alpha = alpha
     
     def cluster(self, X, maxIters=200, tol = 0.001, costInter=1, verbose=1):
-        '''Inputs:  X           = data points [no. attributes * no. points]
+        '''Inputs:  X           = data points [no. points * no. attributes]
                     maxIters    = maximum no. of iterations
                     tol         = tolerance for termination criterion
                     costInter   = frequency with which to check the total cost
@@ -582,6 +586,8 @@ if __name__ == "__main__":
     kmodes_huang.cluster(X, init='Huang')
     kmodes_cao = KModes(4)
     kmodes_cao.cluster(X, init='Cao')
+    kproto = KPrototypes(4)
+    kproto.cluster(np.random.randn((X.shape[0], 3)), X, init='Huang')
     fkmodes = FuzzyKModes(4, alpha=1.1)
     fkmodes.cluster(X)
     ffkmodes = FuzzyFuzzyKModes(4, alpha=1.8)
