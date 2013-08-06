@@ -45,7 +45,7 @@ def variogram(X, y, bins=20, maxDistFrac=0.5, subSample=1., thetaStep=30):
     N = X.shape[0]
     dims = X.shape[1]
     
-    assert len(y.shape) == 1, "y should be single column."
+    assert y.shape[1] == 1 or len(y.shape) == 1, "y should be single column."
     assert N == len(y), "Number of coordinates and data values should be equal."
     if dims != 2 and thetaStep is not None:
         print("Anisotropy analysis only on 2D data. Skipping.")
@@ -54,7 +54,7 @@ def variogram(X, y, bins=20, maxDistFrac=0.5, subSample=1., thetaStep=30):
     
     #TODO: check for missings?
     
-    maxDist = distance.euclidian((np.max(X, axis=1), np.min(X, axis=1))
+    maxDist = distance.euclidean(np.max(X, axis=1), np.min(X, axis=1))
     maxD = maxDist * maxDistFrac
     
     if subSample < 1:
@@ -66,13 +66,13 @@ def variogram(X, y, bins=20, maxDistFrac=0.5, subSample=1., thetaStep=30):
     tol = maxDist / bins
     
     # coordinate indices combinations
-    combs = np.array(itertools.combinations(range(N), 2))
+    combs = np.array(zip(*[x for x in itertools.combinations(range(N), 2)]))
     
     # calculate condensed distance matrix between points
-    XDist = distance.pdist(X, metric='euclidian') ** 2
+    XDist = distance.pdist(X, metric='euclidean') ** 2
     
     # calculate squared Euclidian distance between values
-    yDist = distance.euclidian(y[XDist[:,0], y[XDist[:,1])**2
+    yDist = distance.euclidean(y[combs[:,0]], y[combs[:,1]])**2
     
     if thetaStep:
         nThetaSteps = int(180 / thetaStep);
@@ -80,8 +80,8 @@ def variogram(X, y, bins=20, maxDistFrac=0.5, subSample=1., thetaStep=30):
         thetaStep = thetaStep / 180 * math.pi
         
         # calculate angles, clockwise from top
-        theta = math.atan2( X[combs[:,1],0] - X[combs[:,0],0], \
-                            X[combs[:,1],1] - X[combs[:,0],1] )
+        theta = np.array([math.atan2(xx, yy) for xx, yy in \
+                zip( X[combs[1,:],0] - X[combs[0,:],0], X[combs[1,:],1] - X[combs[0,:],1] )])
         
         # only semicircle
         theta[theta < 0] += math.pi
@@ -111,21 +111,22 @@ def variogram(X, y, bins=20, maxDistFrac=0.5, subSample=1., thetaStep=30):
     else:
         inds = distInd
     
-    indices = np.where(np.ediff1d(distInd, to_begin=[1], to_end=[1]))[0]
+    indices = np.where(np.ediff1d(inds, to_begin=[1], to_end=[1]))[0]
     vals_len = len(indices) - 1
-    vals = np.zeros(vals_len)
-    a_f = a.flat
+    gamma = np.zeros(vals_len)
+    nums = np.zeros(vals_len)
+    a_f = yDist.flat
     for i in xrange(vals_len):
         gamma[i] = varFunc(a_f[indices[i]:indices[i + 1]])
         nums[i] = sum(a_f[indices[i]:indices[i + 1]])
     
-    return varData{'X': X,
-                   'y': y,
-                   'distance': XDist,
-                   'bindistance': distEdge[distInd] + tol/2,
-                   'gamma': gamma,
-                   'theta': thetaCent[thetaInd],
-                   'bincount': nums
+    return {'X': X,
+            'y': y,
+            'distance': XDist,
+            'bindistance': distEdge[distInd] + tol/2,
+            'gamma': gamma,
+            'theta': thetaCent[thetaInd],
+            'bincount': nums
                   }
 
 def plot_variogram(ax, varData, anisotropy=False, cloud=False, binned=False):
@@ -137,10 +138,10 @@ def plot_variogram(ax, varData, anisotropy=False, cloud=False, binned=False):
         distVar = varData['distance']
     
     if anisotropy:
-        Ci = zip(*[(x.real, x.imag) for x in itertools.imap(rect, distVar, varData['theta'])])
+        Ci = zip(*[(x.real, x.imag) for x in itertools.imap(cmath.rect, distVar, varData['theta'])])
         Xc, Yc = np.meshgrid(Ci[0], Ci[1])
-        surf = ax.plot_surface(Xc, Yc, varData['z'], rstride=1, cstride=1, cmap=cm.jet,
-                               linewidth=0, antialiased=True, projection='3D')
+        ax.plot_surface(Xc, Yc, varData['z'], rstride=1, cstride=1, cmap=cm.jet,
+                        linewidth=0, antialiased=True, projection='3D')
         ax.set_xlabel('h y-direction')
         ax.set_ylabel('h x-direction')
         ax.set_zlabel(r"$ \gamma (h) $")
@@ -155,10 +156,10 @@ def plot_variogram(ax, varData, anisotropy=False, cloud=False, binned=False):
     return
 
 if __name__ == '__main__':
-    x = np.random.rand(1000,1)*4 - 2  
+    x = np.random.rand(1000,1)*4 - 2
     y = np.random.rand(1000,1)*4 - 2
-    z = 3*sin(x*15)+ np.random.randn(len(x))
-    varData, distData,  = variogram(np.hstack((x, y)), z, bins=50, maxDistFrac=0.5, subSample=1., thetaStep=30)
+    z = 3*np.sin(x*15) + np.random.randn(len(x),1)
+    varData = variogram(np.hstack((x, y)), z, bins=50, maxDistFrac=0.5, subSample=1., thetaStep=30)
     
     f, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, sharex=False, sharey=False)
     
