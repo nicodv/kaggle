@@ -72,7 +72,7 @@ def variogram(X, y, bins=20, maxDistFrac=0.5, subSample=1., thetaStep=30):
     XDist = distance.pdist(X, metric='euclidean') ** 2
     
     # calculate squared Euclidian distance between values
-    yDist = distance.euclidean(y[combs[:,0]], y[combs[:,1]])**2
+    yDist = np.array(map(distance.euclidean, y[combs[0,:]], y[combs[1,:]])) ** 2
     
     if thetaStep:
         nThetaSteps = int(180 / thetaStep);
@@ -94,10 +94,10 @@ def variogram(X, y, bins=20, maxDistFrac=0.5, subSample=1., thetaStep=30):
         thetaInd = np.digitize(theta, thetaEdge)
         
         # centers of the bins
-        thetaCent = thetaEdge[1:] + thetaStep/2
+        thetaCent = thetaEdge + thetaStep/2
         thetaCent[-1] = math.pi
     
-    varFunc = lambda x: 1/(2 * len(x)) * sum(x)
+    varFunc = lambda x: 1. / (2 * len(x)) * sum(x)
     
     # bin the distances and count, everything larger than maxD in a single bin
     distEdge = np.linspace(0, maxD, bins+1)
@@ -111,14 +111,8 @@ def variogram(X, y, bins=20, maxDistFrac=0.5, subSample=1., thetaStep=30):
     else:
         inds = distInd
     
-    indices = np.where(np.ediff1d(inds, to_begin=[1], to_end=[1]))[0]
-    vals_len = len(indices) - 1
-    gamma = np.zeros(vals_len)
-    nums = np.zeros(vals_len)
-    a_f = yDist.flat
-    for i in xrange(vals_len):
-        gamma[i] = varFunc(a_f[indices[i]:indices[i + 1]])
-        nums[i] = sum(a_f[indices[i]:indices[i + 1]])
+    gamma = accum_np(inds, yDist, func=varFunc)
+    nums = accum_np(inds, np.ones(yDist.shape), func=np.sum)
     
     return {'X': X,
             'y': y,
@@ -128,6 +122,15 @@ def variogram(X, y, bins=20, maxDistFrac=0.5, subSample=1., thetaStep=30):
             'theta': thetaCent[thetaInd],
             'bincount': nums
                   }
+
+def accum_np(accmap, arr, func=np.sum):
+    '''Matlab's accumarray equivalent, from mldesign.net
+    '''
+    indices = np.where(np.ediff1d(accmap, to_begin=[1], to_end=[1]))[0]
+    vals = np.zeros(len(indices) - 1)
+    for i in xrange(len(indices) - 1):
+        vals[i] = func(arr[indices[i]:indices[i+1]])
+    return vals
 
 def plot_variogram(ax, varData, anisotropy=False, cloud=False, binned=False):
     if cloud:
@@ -140,7 +143,7 @@ def plot_variogram(ax, varData, anisotropy=False, cloud=False, binned=False):
     if anisotropy:
         Ci = zip(*[(x.real, x.imag) for x in itertools.imap(cmath.rect, distVar, varData['theta'])])
         Xc, Yc = np.meshgrid(Ci[0], Ci[1])
-        ax.plot_surface(Xc, Yc, varData['z'], rstride=1, cstride=1, cmap=cm.jet,
+        ax.plot_surface(Xc, Yc, varData['y'], rstride=1, cstride=1, cmap=cm.jet,
                         linewidth=0, antialiased=True, projection='3D')
         ax.set_xlabel('h y-direction')
         ax.set_ylabel('h x-direction')
@@ -156,8 +159,8 @@ def plot_variogram(ax, varData, anisotropy=False, cloud=False, binned=False):
     return
 
 if __name__ == '__main__':
-    x = np.random.rand(1000,1)*4 - 2
-    y = np.random.rand(1000,1)*4 - 2
+    x = np.random.rand(100,1)*4 - 2
+    y = np.random.rand(100,1)*4 - 2
     z = 3*np.sin(x*15) + np.random.randn(len(x),1)
     varData = variogram(np.hstack((x, y)), z, bins=50, maxDistFrac=0.5, subSample=1., thetaStep=30)
     
@@ -176,7 +179,7 @@ if __name__ == '__main__':
     plot_variogram(ax3, varData);
     ax3.set_title("Isotropic variogram")
     
-    plot_variogram(ax4, varData, anitropy=True)
+    plot_variogram(ax4, varData, anisotropy=True)
     ax4.set_title("Anisotropic variogram")
     
     plt.show()
