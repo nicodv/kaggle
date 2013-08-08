@@ -145,32 +145,26 @@ def accum_np(accmap, a, func=np.sum, fillvalue=0):
     for i in range(len(indices) - 1):
         indices_i = indices[i]
         vals[accmap_rev[indices_i]] = func(a_rev[indices_i:indices[i + 1]])
+    
     return vals
 
-def plot_variogram(ax, varData, anisotropy=False, cloud=False, binned=False):
-    if cloud:
-        marker = 'k.'
-        distVar = varData['distance'] if not binned else varData['bindistance']
-    else:
-        marker = 'ro--'
-        distVar = varData['distance']
+def plot_variogram(ax, dist, gamma, maxD=None, theta=None, cloud=False):
+    marker = 'k.' if cloud else 'ro--'
     
-    if anisotropy:
-        Ci = zip(*[(x.real, x.imag) for x in itertools.imap(cmath.rect, distVar, varData['theta'])])
+    if len(theta) > 1:
+        Ci = zip(*[(x.real, x.imag) for x in itertools.imap(cmath.rect, dist, theta)])
         Xc, Yc = np.meshgrid(Ci[0], Ci[1])
-        surf = ax.plot_surface(Xc, Yc, varData['y'], rstride=1, cstride=1, cmap=cm.jet,
+        surf = ax.plot_surface(Xc, Yc, gamma, rstride=1, cstride=1, cmap=cm.jet,
                                linewidth=0, antialiased=True)
         ax.set_xlabel('h y-direction')
         ax.set_ylabel('h x-direction')
         ax.set_zlabel(r"$ \gamma (h) $")
-        ax.set_title("Directional variogram")
     else:
-        ax.plot(distVar, varData['gamma'], marker)
-        ax.set_xlim((0,varData['maxD']))
-        ax.set_ylim((0,1.1 * max(varData['gamma'])))
+        ax.plot(dist, gamma, marker)
+        ax.set_xlim((0,maxD))
+        ax.set_ylim((0,1.1 * max(gamma)))
         ax.set_xlabel("h");
-        ax.set_ylabel(r"$ \gamma (h) $");
-        ax.set_title("(Semi-)Variogram");
+        ax.set_ylabel(r"$ \gamma (h) $")
     return
 
 if __name__ == '__main__':
@@ -178,26 +172,42 @@ if __name__ == '__main__':
     y = np.random.rand(1000,1)*4 - 2
     z = 3*np.sin(x*15) + np.random.randn(len(x),1)
     varData = variogram(np.hstack((x, y)), z, bins=50, maxDistFrac=0.5, subSample=1., thetaStep=30)
+    dist, bdist, gamma, maxD, theta = varData['distance'], varData['bindistance'], varData['gamma'], \
+                                      varData['maxD'], varData['theta']
     
-    fig = plt.figure()
-    ax1 = fig.add_subplot(2, 2, 1)
-    ax1.scatter(x, y, marker='o', c=z)
-    ax1.set_xlabel("x")
-    ax1.set_ylabel("y")
-    ax1.set_title("Data (coloring according to z-value)")
+    fig = plt.figure(1)
+    ax = fig.add_subplot(2, 3, 1)
+    ax.scatter(x, y, marker='o', c=z)
+    ax.set_xlabel("x")
+    ax.set_ylabel("y")
+    ax.set_title("Data (coloring according to z-value)")
     
-    ax2 = fig.add_subplot(2, 2, 2)
-    ax2.hist(z, 20)
-    ax2.set_xlabel("z")
-    ax2.set_ylabel("frequency")
-    ax2.set_title("Histogram of z-values")
+    ax = fig.add_subplot(2, 3, 2)
+    ax.hist(z, 20)
+    ax.set_xlabel("z")
+    ax.set_ylabel("frequency")
+    ax.set_title("Histogram of z-values")
     
-    ax3 = fig.add_subplot(2, 2, 3)
-    plot_variogram(ax3, varData);
-    ax3.set_title("Isotropic variogram")
+    ax = fig.add_subplot(2, 3, 3)
+    plot_variogram(ax, bdist, gamma, maxD, cloud=True)
+    ax.set_title("Variogram cloud (binned distances)")
+    ax = fig.add_subplot(2, 3, 4)
+    plot_variogram(ax, dist, gamma, maxD, cloud=True)
+    ax.set_title("Variogram cloud (raw distances)")
     
-    ax4 = fig.add_subplot(2, 2, 4, projection='3d')
-    plot_variogram(ax4, varData, anisotropy=True)
-    ax4.set_title("Anisotropic variogram")
+    ax = fig.add_subplot(2, 3, 5)
+    plot_variogram(ax, bdist, gamma, maxD)
+    ax.set_title("Isotropic variogram")
+    ax.grid()
+    
+    ax = fig.add_subplot(2, 3, 6, projection='3d')
+    plot_variogram(ax, bdist, gamma, maxD, theta)
+    ax.set_title("Anisotropic variogram")
+    
+    fig = plt.figure(2)
+    for ii in range(theta):
+        ax = fig.add_subplot(2, 3, ii+1)
+        plot_variogram(ax, bdist, gamma, maxD, theta[ii])
+        ax.set_title("Variogram for theta = %f" % (theta[ii], ))
     
     plt.show()
