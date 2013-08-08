@@ -33,7 +33,7 @@ def variogram(X, y, bins=20, maxDistFrac=0.5, subSample=1., thetaStep=30):
                     y           = input y
                     distance    = distances between points
                     bindistance = binned distances between points
-                    gamma       = 
+                    gamma       = gamma values describing variogram
                     theta       = angles
                     bincount    = bincount of gammas
     
@@ -126,7 +126,7 @@ def variogram(X, y, bins=20, maxDistFrac=0.5, subSample=1., thetaStep=30):
 
 def accum_np(accmap, a, func=np.sum, fillvalue=0):
     '''Matlab's accumarray method in numpy
-    credit: mldesign.net (https://github.com/ml31415/accumarray)
+    Credit: mldesign.net (https://github.com/ml31415/accumarray)
     '''
     # Mergesort does a stable search, so grouping
     # functions can rely on the sort order
@@ -156,15 +156,15 @@ def plot_variogram(ax, dist, gamma, maxD=None, theta=None, cloud=False):
         Xc, Yc = np.meshgrid(Ci[0], Ci[1])
         surf = ax.plot_surface(Xc, Yc, gamma, rstride=1, cstride=1, cmap=cm.jet,
                                linewidth=0, antialiased=True)
-        ax.set_xlabel('h y-direction')
-        ax.set_ylabel('h x-direction')
-        ax.set_zlabel(r"$ \gamma (h) $")
+        ax.set_xlabel(r"Distance $h_x$")
+        ax.set_ylabel(r"Distance $h_y$")
+        ax.set_zlabel(r"$\gamma (h)$")
     else:
         ax.plot(dist, gamma, marker)
         ax.set_xlim((0,maxD))
         ax.set_ylim((0,1.1 * max(gamma)))
-        ax.set_xlabel("h");
-        ax.set_ylabel(r"$ \gamma (h) $")
+        ax.set_xlabel("Distance h")
+        ax.set_ylabel(r"$\gamma (h)$")
     return
 
 if __name__ == '__main__':
