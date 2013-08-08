@@ -111,8 +111,8 @@ def variogram(X, y, bins=20, maxDistFrac=0.5, subSample=1., thetaStep=30):
     else:
         inds = distInd
     
-    gamma = accum_np(inds, yDist, func=varFunc)
-    nums = accum_np(inds, np.ones(yDist.shape), func=np.sum)
+    gamma = accum_np(inds, yDist, func=varFunc, size=(len(distEdge), len(thetaEdge)), fillVal=np.nan)
+    nums = accum_np(inds, np.ones(yDist.shape), func=np.sum, size=(len(distEdge), 1), fillVal=np.nan)
     
     return {'X': X,
             'y': y,
@@ -122,15 +122,6 @@ def variogram(X, y, bins=20, maxDistFrac=0.5, subSample=1., thetaStep=30):
             'theta': thetaCent[thetaInd],
             'bincount': nums
                   }
-
-def accum_np(accmap, arr, func=np.sum):
-    '''Matlab's accumarray equivalent, from mldesign.net
-    '''
-    indices = np.where(np.ediff1d(accmap, to_begin=[1], to_end=[1]))[0]
-    vals = np.zeros(len(indices) - 1)
-    for i in xrange(len(indices) - 1):
-        vals[i] = func(arr[indices[i]:indices[i+1]])
-    return vals
 
 def plot_variogram(ax, varData, anisotropy=False, cloud=False, binned=False):
     if cloud:
