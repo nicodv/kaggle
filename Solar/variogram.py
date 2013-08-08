@@ -208,6 +208,6 @@ if __name__ == '__main__':
     for ii in range(theta):
         ax = fig.add_subplot(2, 3, ii+1)
         plot_variogram(ax, bdist, gamma, maxD, theta[ii])
-        ax.set_title("Variogram for theta = %f" % (theta[ii], ))
+        ax.set_title("Variogram for theta = %f3. degrees" % ((theta[ii]/math.pi)*180, ))
     
     plt.show()
