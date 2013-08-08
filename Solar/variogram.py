@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
 
+
 def variogram(X, y, bins=20, maxDistFrac=0.5, subSample=1., thetaStep=30):
     '''Calculates experimental variogram.
     
@@ -111,8 +112,8 @@ def variogram(X, y, bins=20, maxDistFrac=0.5, subSample=1., thetaStep=30):
     else:
         inds = distInd
     
-    gamma = accum_np(inds, yDist, func=varFunc, size=(len(distEdge), len(thetaEdge)), fillVal=np.nan)
-    nums = accum_np(inds, np.ones(yDist.shape), func=np.sum, size=(len(distEdge), 1), fillVal=np.nan)
+    gamma = accum_np(inds, yDist, func=varFunc,  fillVal=np.nan)
+    nums = accum_np(inds, np.ones(yDist.shape), func=np.sum, fillVal=np.nan)
     
     return {'X': X,
             'y': y,
@@ -122,6 +123,29 @@ def variogram(X, y, bins=20, maxDistFrac=0.5, subSample=1., thetaStep=30):
             'theta': thetaCent[thetaInd],
             'bincount': nums
                   }
+
+def accum_np(accmap, a, func=np.sum, fillvalue=0):
+    '''Matlab's accumarray method in numpy
+    credit: mldesign.net (https://github.com/ml31415/accumarray)
+    '''
+    # Mergesort does a stable search, so grouping
+    # functions can rely on the sort order
+    rev = np.argsort(accmap.flat, kind='mergesort')
+    accmap_rev = accmap.flat[rev]
+    if accmap_rev[0] < 0:
+        raise ValueError("Accmap contains negative indices")
+    indices = np.where(np.ediff1d(accmap_rev, to_begin=[1], to_end=[1]))[0]
+    
+    vals_len = accmap_rev[-1] + 1
+    vals = np.zeros(vals_len)
+    if fillvalue is not 0:
+        vals.fill(fillvalue)
+    
+    a_rev = a.flat[rev]
+    for i in range(len(indices) - 1):
+        indices_i = indices[i]
+        vals[accmap_rev[indices_i]] = func(a_rev[indices_i:indices[i + 1]])
+    return vals
 
 def plot_variogram(ax, varData, anisotropy=False, cloud=False, binned=False):
     if cloud:
@@ -134,42 +158,45 @@ def plot_variogram(ax, varData, anisotropy=False, cloud=False, binned=False):
     if anisotropy:
         Ci = zip(*[(x.real, x.imag) for x in itertools.imap(cmath.rect, distVar, varData['theta'])])
         Xc, Yc = np.meshgrid(Ci[0], Ci[1])
-        ax.plot_surface(Xc, Yc, varData['y'], rstride=1, cstride=1, cmap=cm.jet,
-                        linewidth=0, antialiased=True, projection='3D')
+        surf = ax.plot_surface(Xc, Yc, varData['y'], rstride=1, cstride=1, cmap=cm.jet,
+                               linewidth=0, antialiased=True)
         ax.set_xlabel('h y-direction')
         ax.set_ylabel('h x-direction')
         ax.set_zlabel(r"$ \gamma (h) $")
         ax.set_title("Directional variogram")
     else:
         ax.plot(distVar, varData['gamma'], marker)
-        ax.xlim((0,varData['maxD']))
-        ax.ylim((0,1.1 * max(varData['gamma'])))
+        ax.set_xlim((0,varData['maxD']))
+        ax.set_ylim((0,1.1 * max(varData['gamma'])))
         ax.set_xlabel("h");
         ax.set_ylabel(r"$ \gamma (h) $");
         ax.set_title("(Semi-)Variogram");
     return
 
 if __name__ == '__main__':
-    x = np.random.rand(100,1)*4 - 2
-    y = np.random.rand(100,1)*4 - 2
+    x = np.random.rand(1000,1)*4 - 2
+    y = np.random.rand(1000,1)*4 - 2
     z = 3*np.sin(x*15) + np.random.randn(len(x),1)
     varData = variogram(np.hstack((x, y)), z, bins=50, maxDistFrac=0.5, subSample=1., thetaStep=30)
     
-    f, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, sharex=False, sharey=False)
-    
+    fig = plt.figure()
+    ax1 = fig.add_subplot(2, 2, 1)
     ax1.scatter(x, y, marker='o', c=z)
     ax1.set_xlabel("x")
     ax1.set_ylabel("y")
     ax1.set_title("Data (coloring according to z-value)")
     
+    ax2 = fig.add_subplot(2, 2, 2)
     ax2.hist(z, 20)
     ax2.set_xlabel("z")
     ax2.set_ylabel("frequency")
     ax2.set_title("Histogram of z-values")
     
+    ax3 = fig.add_subplot(2, 2, 3)
     plot_variogram(ax3, varData);
     ax3.set_title("Isotropic variogram")
     
+    ax4 = fig.add_subplot(2, 2, 4, projection='3d')
     plot_variogram(ax4, varData, anisotropy=True)
     ax4.set_title("Anisotropic variogram")
     
