@@ -13,7 +13,7 @@ import itertools
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
-
+from accum import accum
 
 def variogram(X, y, bins=20, maxDistFrac=0.5, subSample=1., thetaStep=30):
     '''Calculates experimental variogram.
@@ -112,13 +112,16 @@ def variogram(X, y, bins=20, maxDistFrac=0.5, subSample=1., thetaStep=30):
     else:
         inds = distInd
     
-    gamma = accum_np(inds, yDist, func=varFunc,  fillVal=np.nan)
-    nums = accum_np(inds, np.ones(yDist.shape), func=np.sum, fillVal=np.nan)
+    gamma = accum_np(inds, yDist, func=varFunc,  fillvalue=np.nan)
+    nums = accum_np(inds, np.ones(yDist.shape), func=np.sum, fillvalue=np.nan)
+    #gamma = accum(inds, yDist, func=varFunc, fill_value=np.nan)
+    #nums = accum(inds, np.ones(yDist.shape), func=np.sum, fill_value=np.nan)
     
     return {'X': X,
             'y': y,
             'distance': XDist,
             'bindistance': distEdge[distInd] + tol/2,
+            'maxD': maxD,
             'gamma': gamma,
             'theta': thetaCent[thetaInd],
             'bincount': nums
@@ -151,7 +154,7 @@ def accum_np(accmap, a, func=np.sum, fillvalue=0):
 def plot_variogram(ax, dist, gamma, maxD=None, theta=None, cloud=False):
     marker = 'k.' if cloud else 'ro--'
     
-    if len(theta) > 1:
+    if theta and len(theta) > 1:
         Ci = zip(*[(x.real, x.imag) for x in itertools.imap(cmath.rect, dist, theta)])
         Xc, Yc = np.meshgrid(Ci[0], Ci[1])
         surf = ax.plot_surface(Xc, Yc, gamma, rstride=1, cstride=1, cmap=cm.jet,
@@ -168,8 +171,8 @@ def plot_variogram(ax, dist, gamma, maxD=None, theta=None, cloud=False):
     return
 
 if __name__ == '__main__':
-    x = np.random.rand(1000,1)*4 - 2
-    y = np.random.rand(1000,1)*4 - 2
+    x = np.random.rand(100,1)*4 - 2
+    y = np.random.rand(100,1)*4 - 2
     z = 3*np.sin(x*15) + np.random.randn(len(x),1)
     varData = variogram(np.hstack((x, y)), z, bins=50, maxDistFrac=0.5, subSample=1., thetaStep=30)
     dist, bdist, gamma, maxD, theta = varData['distance'], varData['bindistance'], varData['gamma'], \
