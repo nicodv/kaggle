@@ -13,7 +13,7 @@ import itertools
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
-from accum import accum
+
 
 def variogram(X, y, bins=20, maxDistFrac=0.5, subSample=1., thetaStep=30):
     '''Calculates experimental variogram.
@@ -112,16 +112,20 @@ def variogram(X, y, bins=20, maxDistFrac=0.5, subSample=1., thetaStep=30):
     else:
         inds = distInd
     
-    gamma = accum_np(inds, yDist, func=varFunc,  fillvalue=np.nan)
-    nums = accum_np(inds, np.ones(yDist.shape), func=np.sum, fillvalue=np.nan)
-    #gamma = accum(inds, yDist, func=varFunc, fill_value=np.nan)
-    #nums = accum(inds, np.ones(yDist.shape), func=np.sum, fill_value=np.nan)
+    gamma = accum_np(inds, yDist, func=varFunc, fillVal=np.nan)
+    nums = accum_np(inds, np.ones(yDist.shape), func=np.sum, fillVal=np.nan)
+    
+    # necessary?
+    #gamma = gamma[:-1]
+    #num = nums[:-1]
     
     return {'X': X,
             'y': y,
             'distance': XDist,
             'bindistance': distEdge[distInd] + tol/2,
-            'maxD': maxD,
+			'maxD': maxD,
+            'distbin': distEdge + tol/2,
+            'ydistance': yDist,
             'gamma': gamma,
             'theta': thetaCent[thetaInd],
             'bincount': nums
@@ -171,12 +175,12 @@ def plot_variogram(ax, dist, gamma, maxD=None, theta=None, cloud=False):
     return
 
 if __name__ == '__main__':
-    x = np.random.rand(100,1)*4 - 2
-    y = np.random.rand(100,1)*4 - 2
+    x = np.random.rand(1000,1)*4 - 2
+    y = np.random.rand(1000,1)*4 - 2
     z = 3*np.sin(x*15) + np.random.randn(len(x),1)
     varData = variogram(np.hstack((x, y)), z, bins=50, maxDistFrac=0.5, subSample=1., thetaStep=30)
-    dist, bdist, gamma, maxD, theta = varData['distance'], varData['bindistance'], varData['gamma'], \
-                                      varData['maxD'], varData['theta']
+    dist, bdist, bindist, ydist, gamma, maxD, theta = varData['distance'], varData['bindistance'], \
+            varData['distbin'], varData['ydistance'], varData['gamma'], varData['maxD'], varData['theta']
     
     fig = plt.figure(1)
     ax = fig.add_subplot(2, 3, 1)
@@ -192,25 +196,25 @@ if __name__ == '__main__':
     ax.set_title("Histogram of z-values")
     
     ax = fig.add_subplot(2, 3, 3)
-    plot_variogram(ax, bdist, gamma, maxD, cloud=True)
+    plot_variogram(ax, bdist, ydist, maxD, cloud=True)
     ax.set_title("Variogram cloud (binned distances)")
     ax = fig.add_subplot(2, 3, 4)
-    plot_variogram(ax, dist, gamma, maxD, cloud=True)
+    plot_variogram(ax, dist, ydist, maxD, cloud=True)
     ax.set_title("Variogram cloud (raw distances)")
     
     ax = fig.add_subplot(2, 3, 5)
-    plot_variogram(ax, bdist, gamma, maxD)
+    plot_variogram(ax, distbin, gamma, maxD)
     ax.set_title("Isotropic variogram")
     ax.grid()
     
     ax = fig.add_subplot(2, 3, 6, projection='3d')
-    plot_variogram(ax, bdist, gamma, maxD, theta)
+    plot_variogram(ax, distbin, gamma, maxD, theta)
     ax.set_title("Anisotropic variogram")
     
     fig = plt.figure(2)
     for ii in range(theta):
         ax = fig.add_subplot(2, 3, ii+1)
-        plot_variogram(ax, bdist, gamma, maxD, theta[ii])
+        plot_variogram(ax, distbin, gamma, maxD, theta[ii])
         ax.set_title("Variogram for theta = %f3. degrees" % ((theta[ii]/math.pi)*180, ))
     
     plt.show()
