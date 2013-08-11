@@ -48,7 +48,7 @@ def get_trainer(model, trainset, validset, epochs=20, batch_size=100):
                         default_input_include_prob=0.5, default_input_scale=1./0.5),
         #termination_criterion = MonitorBased(channel_name='y_misclass', prop_decrease=0., N=50),
         termination_criterion = EpochCounter(epochs),
-        update_callbacks = ExponentialDecay(decay_factor=1.00004, min_lr=0.000001)
+        update_callbacks = ExponentialDecay(decay_factor=1.00002, min_lr=0.0001)
     )
     return Train(model=model, algorithm=train_algo, dataset=trainset, save_freq=0, save_path='epoch', \
             extensions=[MomentumAdjustor(final_momentum=0.7, start=0, saturate=int(0.8*epochs))])

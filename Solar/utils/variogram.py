@@ -51,11 +51,12 @@ def variogram(X, y, bins=20, maxDistFrac=0.5, subSample=1., thetaStep=30):
     if dims != 2 and thetaStep is not None:
         print("Anisotropy analysis only on 2D data. Skipping.")
         thetaStep = None
-    assert 360 % thetaStep == 0, "Please choose a number for theta that 360 is divisible with."
+    assert thetaStep is None or 360 % thetaStep == 0, \
+        "Please choose a number for theta that 360 is divisible with."
     
     #TODO: check for missings?
     
-    maxDist = distance.euclidean(np.max(X, axis=1), np.min(X, axis=1))
+    maxDist = distance.euclidean(np.max(X, axis=0), np.min(X, axis=0))
     maxD = maxDist * maxDistFrac
     
     if subSample < 1:
@@ -70,15 +71,15 @@ def variogram(X, y, bins=20, maxDistFrac=0.5, subSample=1., thetaStep=30):
     combs = np.array(zip(*[x for x in itertools.combinations(range(N), 2)]))
     
     # calculate condensed distance matrix between points
-    XDist = distance.pdist(X, metric='euclidean') ** 2
+    XDist = distance.pdist(X, metric='euclidean')
     
     # calculate squared Euclidian distance between values
     yDist = np.array(map(distance.euclidean, y[combs[0,:]], y[combs[1,:]])) ** 2
     
     if thetaStep:
-        nThetaSteps = int(180 / thetaStep);
+        nThetaSteps = int(180. / thetaStep);
         # convert to radians
-        thetaStep = thetaStep / 180 * math.pi
+        thetaStep = (thetaStep / 180.) * math.pi
         
         # calculate angles, clockwise from top
         theta = np.array([math.atan2(xx, yy) for xx, yy in \
@@ -92,11 +93,16 @@ def variogram(X, y, bins=20, maxDistFrac=0.5, subSample=1., thetaStep=30):
         thetaCount, thetaEdge = np.histogram(theta, bins=nThetaSteps, density=False,
                                         range=(-thetaStep/2, math.pi - thetaStep/2))
         # bin indices for all values in theta
-        thetaInd = np.digitize(theta, thetaEdge)
+        thetaInd = np.digitize(theta, thetaEdge[1:])
         
         # centers of the bins
         thetaCent = thetaEdge + thetaStep/2
-        thetaCent[-1] = math.pi
+        
+        theta = thetaCent[thetaInd]
+        thetabin = thetaCent[:-1]
+    else:
+        theta = None
+        thetabin = None
     
     varFunc = lambda x: 1. / (2 * len(x)) * sum(x)
     
@@ -104,83 +110,74 @@ def variogram(X, y, bins=20, maxDistFrac=0.5, subSample=1., thetaStep=30):
     distEdge = np.linspace(0, maxD, bins+1)
     distEdge[-1] = np.inf
     distCount,_ = np.histogram(XDist, bins=distEdge, density=False)
+    distEdge = distEdge[1:]
+    
     # bin indices for all distance values
     distInd = np.digitize(XDist, distEdge)
     
     if thetaStep:
-        inds = np.hstack((distInd, thetaInd))
+        gamma = np.empty((len(distEdge), len(thetaEdge)-1))
+        gamma[:] = np.nan
+        nums = np.empty((len(distEdge), len(thetaEdge)-1))
+        nums[:] = np.nan
+        for d in np.unique(distInd):
+            inds = np.where(distInd == d)
+            sel = yDist[inds]
+            for t in np.unique(thetaInd[inds]):
+                tinds = np.where(thetaInd[inds] == t)
+                tsel = sel[tinds]
+                gamma[d,t] = np.nansum((gamma[d,t],varFunc(tsel)))
+                nums[d,t] = np.nansum((nums[d,t], len(tsel)))
     else:
-        inds = distInd
-    
-    gamma = accum_np(inds, yDist, func=varFunc, fillVal=np.nan)
-    nums = accum_np(inds, np.ones(yDist.shape), func=np.sum, fillVal=np.nan)
-    
-    # necessary?
-    #gamma = gamma[:-1]
-    #num = nums[:-1]
+        gamma = np.empty(len(distEdge))
+        gamma[:] = np.nan
+        nums = np.empty(len(distEdge))
+        nums[:] = np.nan
+        for d in np.unique(distInd):
+            sel = yDist[np.where(distInd == d)]
+            gamma[d] = np.nansum((gamma[d],varFunc(sel)))
+            nums[d] = np.nansum((nums[d], len(sel)))
     
     return {'X': X,
             'y': y,
             'distance': XDist,
             'bindistance': distEdge[distInd] + tol/2,
-			'maxD': maxD,
-            'distbin': distEdge + tol/2,
+            'maxD': maxD,
+            'distbin': distEdge[:-1] + tol/2,
             'ydistance': yDist,
-            'gamma': gamma,
-            'theta': thetaCent[thetaInd],
-            'bincount': nums
-                  }
-
-def accum_np(accmap, a, func=np.sum, fillvalue=0):
-    '''Matlab's accumarray method in numpy
-    Credit: mldesign.net (https://github.com/ml31415/accumarray)
-    '''
-    # Mergesort does a stable search, so grouping
-    # functions can rely on the sort order
-    rev = np.argsort(accmap.flat, kind='mergesort')
-    accmap_rev = accmap.flat[rev]
-    if accmap_rev[0] < 0:
-        raise ValueError("Accmap contains negative indices")
-    indices = np.where(np.ediff1d(accmap_rev, to_begin=[1], to_end=[1]))[0]
-    
-    vals_len = accmap_rev[-1] + 1
-    vals = np.zeros(vals_len)
-    if fillvalue is not 0:
-        vals.fill(fillvalue)
-    
-    a_rev = a.flat[rev]
-    for i in range(len(indices) - 1):
-        indices_i = indices[i]
-        vals[accmap_rev[indices_i]] = func(a_rev[indices_i:indices[i + 1]])
-    
-    return vals
+            'gamma': gamma[:-1],
+            'theta': theta,
+            'thetabin': thetabin,
+            'bincount': nums[:-1]
+            }
 
 def plot_variogram(ax, dist, gamma, maxD=None, theta=None, cloud=False):
     marker = 'k.' if cloud else 'ro--'
     
-    if theta and len(theta) > 1:
-        Ci = zip(*[(x.real, x.imag) for x in itertools.imap(cmath.rect, dist, theta)])
+    if isinstance(theta, np.ndarray):
+        Ci = [cmath.rect(x, y) for x, y in itertools.product(dist, theta)]
+        Ci = zip(*[(x.real, x.imag) for x in Ci])
         Xc, Yc = np.meshgrid(Ci[0], Ci[1])
-        surf = ax.plot_surface(Xc, Yc, gamma, rstride=1, cstride=1, cmap=cm.jet,
-                               linewidth=0, antialiased=True)
+        ax.plot_surface(Xc.flatten(), Yc.flatten(), gamma, cmap=cm.jet, antialiased=False)
         ax.set_xlabel(r"Distance $h_x$")
         ax.set_ylabel(r"Distance $h_y$")
         ax.set_zlabel(r"$\gamma (h)$")
     else:
         ax.plot(dist, gamma, marker)
         ax.set_xlim((0,maxD))
-        ax.set_ylim((0,1.1 * max(gamma)))
+        ax.set_ylim((0,1.1 * np.nanmax(gamma)))
         ax.set_xlabel("Distance h")
         ax.set_ylabel(r"$\gamma (h)$")
     return
 
 if __name__ == '__main__':
-    x = np.random.rand(1000,1)*4 - 2
-    y = np.random.rand(1000,1)*4 - 2
+    x = np.random.rand(100,1)*4 - 2
+    y = np.random.rand(100,1)*4 - 2
     z = 3*np.sin(x*15) + np.random.randn(len(x),1)
     varData = variogram(np.hstack((x, y)), z, bins=50, maxDistFrac=0.5, subSample=1., thetaStep=30)
-    dist, bdist, bindist, ydist, gamma, maxD, theta = varData['distance'], varData['bindistance'], \
-            varData['distbin'], varData['ydistance'], varData['gamma'], varData['maxD'], varData['theta']
+    dist, bdist, distbin, ydist, gamma, maxD, theta, thetabin = varData['distance'], \
+            varData['bindistance'], varData['distbin'], varData['ydistance'], \
+            varData['gamma'], varData['maxD'], varData['theta'], varData['thetabin']
     
     fig = plt.figure(1)
     ax = fig.add_subplot(2, 3, 1)
@@ -208,13 +205,13 @@ if __name__ == '__main__':
     ax.grid()
     
     ax = fig.add_subplot(2, 3, 6, projection='3d')
-    plot_variogram(ax, distbin, gamma, maxD, theta)
+    plot_variogram(ax, distbin, gamma, maxD, thetabin)
     ax.set_title("Anisotropic variogram")
     
     fig = plt.figure(2)
-    for ii in range(theta):
+    for ii, th in enumerate(thetabin):
         ax = fig.add_subplot(2, 3, ii+1)
-        plot_variogram(ax, distbin, gamma, maxD, theta[ii])
-        ax.set_title("Variogram for theta = %f3. degrees" % ((theta[ii]/math.pi)*180, ))
+        plot_variogram(ax, distbin, gamma[:,ii], maxD, th)
+        ax.set_title("Variogram for theta = %d degrees" % ((th/math.pi)*180, ))
     
     plt.show()
