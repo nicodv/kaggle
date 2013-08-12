@@ -13,6 +13,7 @@ import itertools
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from matplotlib import cm
+from scipy.interpolate import griddata
 
 
 def variogram(X, y, bins=20, maxDistFrac=0.5, subSample=1., thetaStep=30):
@@ -157,8 +158,9 @@ def plot_variogram(ax, dist, gamma, maxD=None, theta=None, cloud=False):
     if isinstance(theta, np.ndarray):
         Ci = [cmath.rect(x, y) for x, y in itertools.product(dist, theta)]
         Ci = zip(*[(x.real, x.imag) for x in Ci])
-        Xc, Yc = np.meshgrid(Ci[0], Ci[1])
-        ax.plot_surface(Xc.flatten(), Yc.flatten(), gamma, cmap=cm.jet, antialiased=False)
+        Xm, Ym = np.meshgrid(Ci[0], Ci[1])
+        Zm = griddata(zip(Ci[0], Ci[1]), gamma.ravel(), np.meshgrid(Ci[0], Ci[1]), method='cubic')
+        ax.plot_surface(Xm, Ym, Zm, cmap=cm.jet, linewidth=0, antialiased=False)
         ax.set_xlabel(r"Distance $h_x$")
         ax.set_ylabel(r"Distance $h_y$")
         ax.set_zlabel(r"$\gamma (h)$")
