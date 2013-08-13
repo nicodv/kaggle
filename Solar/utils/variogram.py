@@ -156,10 +156,17 @@ def plot_variogram(ax, dist, gamma, maxD=None, theta=None, cloud=False):
     marker = 'k.' if cloud else 'ro--'
     
     if isinstance(theta, np.ndarray):
+        # convert from polar to Cartesian
         Ci = [cmath.rect(x, y) for x, y in itertools.product(dist, theta)]
         Ci = zip(*[(x.real, x.imag) for x in Ci])
-        Xm, Ym = np.meshgrid(Ci[0], Ci[1])
-        Zm = griddata(zip(Ci[0], Ci[1]), gamma.ravel(), np.meshgrid(Ci[0], Ci[1]), method='cubic')
+        X, Y = Ci[0], Ci[1]
+        # grid point coordinates between which to interpolate
+        xi = np.linspace(np.min(X), np.max(X), 100)
+        yi = np.linspace(np.min(Y), np.max(Y), 100)
+        # make a grid out of them
+        Xm, Ym = np.meshgrid(xi, yi)
+        # now make a grid for the z-axis
+        Zm = griddata(zip(X, Y), gamma.flatten(), np.meshgrid(xi, yi), method='cubic')
         ax.plot_surface(Xm, Ym, Zm, cmap=cm.jet, linewidth=0, antialiased=False)
         ax.set_xlabel(r"Distance $h_x$")
         ax.set_ylabel(r"Distance $h_y$")
