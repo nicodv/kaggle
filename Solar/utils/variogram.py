@@ -161,13 +161,13 @@ def plot_variogram(ax, dist, gamma, maxD=None, theta=None, cloud=False):
         Ci = zip(*[(x.real, x.imag) for x in Ci])
         X, Y = Ci[0], Ci[1]
         # grid point coordinates between which to interpolate
-        xi = np.linspace(np.min(X), np.max(X), 100)
-        yi = np.linspace(np.min(Y), np.max(Y), 100)
+        xi = np.linspace(np.min(X), np.max(X), 40)
+        yi = np.linspace(np.min(Y), np.max(Y), 40)
         # make a grid out of them
         Xm, Ym = np.meshgrid(xi, yi)
         # now make a grid for the z-axis
-        Zm = griddata(zip(X, Y), gamma.flatten(), np.meshgrid(xi, yi), method='cubic')
-        ax.plot_surface(Xm, Ym, Zm, cmap=cm.jet, linewidth=0, antialiased=False)
+        Zm = griddata(zip(X, Y), gamma.flatten(), (Xm, Ym), method='cubic')
+        ax.plot_surface(Xm, Ym, Zm, cmap=cm.coolwarm, linewidth=0, antialiased=False)
         ax.set_xlabel(r"Distance $h_x$")
         ax.set_ylabel(r"Distance $h_y$")
         ax.set_zlabel(r"$\gamma (h)$")
@@ -180,8 +180,8 @@ def plot_variogram(ax, dist, gamma, maxD=None, theta=None, cloud=False):
     return
 
 if __name__ == '__main__':
-    x = np.random.rand(100,1)*4 - 2
-    y = np.random.rand(100,1)*4 - 2
+    x = np.random.rand(1000,1)*4 - 2
+    y = np.random.rand(1000,1)*4 - 2
     z = 3*np.sin(x*15) + np.random.randn(len(x),1)
     varData = variogram(np.hstack((x, y)), z, bins=50, maxDistFrac=0.5, subSample=1., thetaStep=30)
     dist, bdist, distbin, ydist, gamma, maxD, theta, thetabin = varData['distance'], \
