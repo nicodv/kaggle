@@ -12,6 +12,7 @@ def load_stations(fileName='station_info.csv'):
     path = os.path.join(basePath, fileName)
     stations = pd.read_csv(path, skiprows=1, index_col=0, dtype='np.float64')
     stations.columns = ['lat', 'lon', 'elev']
+    stations['lon'] -= 360
     return stations
 
 def load_mesonet(fileName='train.csv'):
@@ -29,6 +30,3 @@ def load_gefs(dataset):
     path = os.path.join(basePath, fileName)
     gefsData = netCDF4.Dataset(path)
     return gefsData
-
-def load_gefs_metadata()
-    return
