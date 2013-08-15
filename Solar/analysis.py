@@ -8,7 +8,10 @@ stations = datamanip.load_stations()
 gefsData = datamanip.load_gefs('train')
 
 # Let's work with the mean over the ensemble and over the forecasts
-gefsData = np.apply_over_axes(np.mean, gefsData, [1, 2])
+gefsData = np.apply_over_axes(np.mean, gefsData.variables.values()[-1], [1, 2])[0]
+# let's work with the first ensemble member only, for the 9-hour forecast
+#gefsData = gefsData.variables.values()[-1][:,0,2][0]
+
 
 fig = plt.figure(1)
 for ii, var in enumerate(variables):
