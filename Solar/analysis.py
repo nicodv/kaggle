@@ -12,7 +12,6 @@ gefsData = np.apply_over_axes(np.mean, gefsData.variables.values()[-1], [1, 2])[
 # let's work with the first ensemble member only, for the 9-hour forecast
 #gefsData = gefsData.variables.values()[-1][:,0,2][0]
 
-
 fig = plt.figure(1)
 for ii, var in enumerate(variables):
     lats = gefsData.variables['lat'][:]
@@ -41,6 +40,5 @@ for curVar in ('temp', ):
     # spatial dispersion is defined as the variance of the difference in time series
     spatialDisp = [np.var(curData[x] - curData[y]) for a, b in iter.combinations(stations.columns, 2)]
     distances = [euclidean(stations[a], stations[b]) for a, b in iter.combinations(stations.columns, 2)]
-
 
 robjects.r('command')
