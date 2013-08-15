@@ -161,13 +161,13 @@ def plot_variogram(ax, dist, gamma, maxD=None, theta=None, cloud=False):
         Ci = zip(*[(x.real, x.imag) for x in Ci])
         X, Y = Ci[0], Ci[1]
         # grid point coordinates between which to interpolate
-        xi = np.linspace(np.min(X), np.max(X), 40)
-        yi = np.linspace(np.min(Y), np.max(Y), 40)
+        xi = np.linspace(np.min(X), np.max(X), 10)
+        yi = np.linspace(np.min(Y), np.max(Y), 10)
         # make a grid out of them
         Xm, Ym = np.meshgrid(xi, yi)
         # now make a grid for the z-axis
-        Zm = griddata(zip(X, Y), gamma.flatten(), (Xm, Ym), method='cubic')
-        ax.plot_surface(Xm, Ym, Zm, cmap=cm.coolwarm, linewidth=0, antialiased=False)
+        Zm = griddata(zip(X, Y), gamma.ravel(), (Xm, Ym), method='cubic')
+        ax.plot_surface(Xm, Ym, Zm, cmap=cm.coolwarm, linewidth=0, cstride=1, rstride=1, antialiased=True)
         ax.set_xlabel(r"Distance $h_x$")
         ax.set_ylabel(r"Distance $h_y$")
         ax.set_zlabel(r"$\gamma (h)$")
