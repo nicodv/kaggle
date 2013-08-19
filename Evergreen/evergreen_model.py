@@ -10,9 +10,9 @@ from sklearn import feature_extraction, metrics, linear_model
 from sklearn.cross_validation import KFold
 from scipy import sparse
 from itertools import combinations
-from kmodes import KPrototypes
+import kmodes
 
-BASE_PATH = 'home/nico/datasets/Kaggle/Evergreen/'
+BASE_PATH = '/home/nico/datasets/Kaggle/Evergreen/'
 
 
 def dict_encode(encoding, value):
@@ -70,7 +70,7 @@ def one_hot_encoder(data, keymap=None):
 
 def create_test_submission(filename, urlids, predictions):
     content = ['urlid,label']
-    for i, p in enumerate(prediction):
+    for i, p in enumerate(predictions):
         content.append('%i,%f' % (urlids[i], p))
     f = open(filename, 'w')
     f.write('\n'.join(content))
@@ -89,62 +89,62 @@ def cv_loop(X, y, model, N, seed):
     return mean_auc / N
 
 def main(train, test, submit, seed, min_occurs, good_features):
-	
+    
     start_time = time.time()
     print("Reading train dataset...")
-    train_data = pd.read_csv(train)
+    train_data = pd.read_csv(train, sep='\t')
     #print(train_data.head())
-	
+    
     print("Reading test dataset...")
-    test_data = pd.read_csv(test)
+    test_data = pd.read_csv(test, sep='\t')
     #print(test_data.head())
-	
-    all_data = np.vstack((train_data.ix[:, 1:], test_data.ix[:, 1:]))
-	
+    
+    y = np.array(train_data.label)
+    all_data = pd.concat((train_data.ix[:, 1:-1], test_data.ix[:, 1:]), axis=0)
+    
     num_train = np.shape(train_data)[0]
-	
-	# convert boilerplate to something useful
-    boilerplate = json.loads(all_data['boilerplate'])
-	all_data.drop(['boilerplate'])
-    title_bow = feature_extraction.text.CountVectorizer(boilerplate['title'], stop_words='english', min_df=2)
-    title_bow.fit_transform()
-    body_bow = feature_extraction.text.CountVectorizer(boilerplate['body'], stop_words='english', min_df=2)
-    body_bow.fit_transform()
-    url_bow = feature_extraction.text.CountVectorizer(boilerplate['url'], stop_words='english', min_df=2)
-    url_bow.fit_transform()
-    all_data = pd.concat(all_data, pd.DataFrame(title_bow), pd.DataFrame(body_bow), pd.DataFrame(url_bow), axis=1)
-	
+    
+    # convert boilerplate to something useful
+    for ii, cur in enumerate(('title', 'body', 'url')):
+        curData = [json.loads(x)[cur] if cur in json.loads(x) else None for x in all_data['boilerplate']]
+        curData = ['empty' if x==None else x for x in curData]
+        bow = feature_extraction.text.CountVectorizer(stop_words='english', min_df=1)
+        bow.fit_transform(curData)
+        all_data[cur+'_bow'] = pd.Series(bow)
+    all_data = all_data.drop(['boilerplate'])
+    
     # Transform data
     print("Transforming data (%i instances)..." % num_train)
     d_2 = group_data(all_data, degree=2, min_occurs=min_occurs)
     d_3 = group_data(all_data, degree=3, min_occurs=min_occurs)
     d_4 = group_data(all_data, degree=4, min_occurs=min_occurs)
-
-    y = array(train_data.label)
-    X_train_all = np.hstack((all_data[:num_train], d_2[:num_train], d_3[:num_train], d_4[:num_train]))
-    X_test_all  = np.hstack((all_data[num_train:], d_2[num_train:], d_3[num_train:], d_4[num_train:]))
-	
+    
+    #X_train_all = np.hstack((all_data[:num_train], d_2[:num_train], d_3[:num_train], d_4[:num_train]))
+    #X_test_all  = np.hstack((all_data[num_train:], d_2[num_train:], d_3[num_train:], d_4[num_train:]))
+    X_train_all = all_data[:num_train]
+    X_test_all = all_data[num_train:]
+    
     num_features = X_train_all.shape[1]
     print("Total number of features %i" % num_features)
-	
+    
     rnd = random.Random()
     rnd.seed(seed*num_features)
-	
+    
     model = linear_model.LogisticRegression()
     model.C = 0.5 + rnd.random()*3.5
     print("Logistic C parameter: %f" % model.C)
-	
+    
     # Xts holds one hot encodings for each individual feature in memory
     # speeding up feature selection
     Xts = [one_hot_encoder(X_train_all[:, [i]])[0] for i in range(num_features)]
-
+    
     print("Performing aproximate greedy feature selection...")
     N = 10
-
+    
     if good_features is None:
         score_hist = []
         good_features = set([])
-
+        
         # Feature selection loop
         f_remain = range(len(Xts))
         cur_best_score = -1
@@ -157,7 +157,7 @@ def main(train, test, submit, seed, min_occurs, good_features):
             i = 0
             iter_best_score = -1
             for f in f_shuff:
-
+                
                 i += 1
                 feats = list(good_features) + [f]
                 Xt = sparse.hstack([Xts[j] for j in feats]).tocsr()
@@ -183,14 +183,14 @@ def main(train, test, submit, seed, min_occurs, good_features):
                       (list(good_features), best_score[0], len(f_remain)))
             else:
                 break
-
+    
     good_features = sorted(list(good_features))
     print("Selected features %s" % good_features)
-
+    
     print("Performing hyperparameter selection...")
     # Hyperparameter selection loop
     Xt = sparse.hstack([Xts[j] for j in good_features]).tocsr()
-
+    
     score_hist = []
     score = cv_loop(Xt, y, model, N, seed)
     score_hist.append((score, model.C))
@@ -204,16 +204,16 @@ def main(train, test, submit, seed, min_occurs, good_features):
     model.C = sorted(score_hist)[-1][1]
     score = sorted(score_hist)[-1][0]
     print("Best (C, AUC): (%f, %f)" % (model.C, score))
-
+    
     print("Performing One Hot Encoding on entire dataset...")
     Xt = np.vstack((X_train_all[:, good_features], X_test_all[:, good_features]))
     Xt, keymap = one_hot_encoder(Xt)
     X_train = Xt[:num_train]
     X_test = Xt[num_train:]
-
+    
     print("Training full model...")
     model.fit(X_train, y)
-
+    
     print("Making prediction and saving results...")
     preds = model.predict_proba(X_test)[:, 1]
     create_test_submission(submit, preds)
