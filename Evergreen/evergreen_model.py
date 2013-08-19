@@ -20,7 +20,7 @@ def dict_encode(encoding, value):
     enc = encoding[value]
     enc['count'] += 1
     encoding[value] = enc
-	return encoding
+    return encoding
 
 def dict_decode(encoding, value, min_occurs):
     enc = encoding[value]
@@ -43,12 +43,11 @@ def group_data(data, degree, min_occurs):
 
 def one_hot_encoder(data, keymap=None):
     '''
-	one_hot_encoder takes data matrix with categorical columns and
-	converts it to a sparse binary matrix.
-	Returns sparse binary matrix and keymap mapping categories to indicies.
-	If a keymap is supplied on input it will be used instead of creating one
-	and any categories appearing in the data that are not in the keymap are
-	ignored
+    one_hot_encoder takes data matrix with categorical columns and
+    converts it to a sparse binary matrix.
+    Returns sparse binary matrix and keymap mapping categories to indicies.
+    If a keymap is supplied on input it will be used instead of creating one
+    and any categories appearing in the data that are not in the keymap are ignored
 	'''
     if keymap is None:
         keymap = []
@@ -103,7 +102,7 @@ def main(train, test, submit, seed, min_occurs, good_features):
 	
     num_train = np.shape(train_data)[0]
 	
-	boilerplate = json.loads(boilerplate)
+    boilerplate = json.loads(boilerplate)
 	
     # Transform data
     print("Transforming data (%i instances)..." % num_train)
@@ -114,9 +113,9 @@ def main(train, test, submit, seed, min_occurs, good_features):
 
     y = array(train_data.ACTION)
     X_train_all = np.hstack((all_data[:num_train], d_2[:num_train], d_3[:num_train],
-    						 d_4[:num_train], d_5[:num_train]))
+                             d_4[:num_train], d_5[:num_train]))
     X_test_all = np.hstack((all_data[num_train:], d_2[num_train:], d_3[num_train:], 
-    						d_4[num_train:], d_5[num_train:]))
+                            d_4[num_train:], d_5[num_train:]))
 	
     num_features = X_train_all.shape[1]
     print("Total number of categorical features %i" % num_features)
