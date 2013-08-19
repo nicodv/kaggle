@@ -6,10 +6,11 @@ import numpy as np
 import pandas as pd
 import json
 
-from sklearn import metrics, linear_model
+from sklearn import feature_extraction, metrics, linear_model
 from sklearn.cross_validation import KFold
 from scipy import sparse
 from itertools import combinations
+from kmodes import KPrototypes
 
 BASE_PATH = 'home/nico/datasets/Kaggle/Evergreen/'
 
@@ -102,23 +103,29 @@ def main(train, test, submit, seed, min_occurs, good_features):
 	
     num_train = np.shape(train_data)[0]
 	
-    boilerplate = json.loads(boilerplate)
+	# convert boilerplate to something useful
+    boilerplate = json.loads(all_data['boilerplate'])
+	all_data.drop(['boilerplate'])
+    title_bow = feature_extraction.text.CountVectorizer(boilerplate['title'], stop_words='english', min_df=2)
+    title_bow.fit_transform()
+    body_bow = feature_extraction.text.CountVectorizer(boilerplate['body'], stop_words='english', min_df=2)
+    body_bow.fit_transform()
+    url_bow = feature_extraction.text.CountVectorizer(boilerplate['url'], stop_words='english', min_df=2)
+    url_bow.fit_transform()
+    all_data = pd.concat(all_data, pd.DataFrame(title_bow), pd.DataFrame(body_bow), pd.DataFrame(url_bow), axis=1)
 	
     # Transform data
     print("Transforming data (%i instances)..." % num_train)
     d_2 = group_data(all_data, degree=2, min_occurs=min_occurs)
     d_3 = group_data(all_data, degree=3, min_occurs=min_occurs)
     d_4 = group_data(all_data, degree=4, min_occurs=min_occurs)
-    d_5 = group_data(all_data, degree=5, min_occurs=min_occurs)
 
-    y = array(train_data.ACTION)
-    X_train_all = np.hstack((all_data[:num_train], d_2[:num_train], d_3[:num_train],
-                             d_4[:num_train], d_5[:num_train]))
-    X_test_all = np.hstack((all_data[num_train:], d_2[num_train:], d_3[num_train:], 
-                            d_4[num_train:], d_5[num_train:]))
+    y = array(train_data.label)
+    X_train_all = np.hstack((all_data[:num_train], d_2[:num_train], d_3[:num_train], d_4[:num_train]))
+    X_test_all  = np.hstack((all_data[num_train:], d_2[num_train:], d_3[num_train:], d_4[num_train:]))
 	
     num_features = X_train_all.shape[1]
-    print("Total number of categorical features %i" % num_features)
+    print("Total number of features %i" % num_features)
 	
     rnd = random.Random()
     rnd.seed(seed*num_features)
@@ -216,33 +223,33 @@ def main(train, test, submit, seed, min_occurs, good_features):
 if __name__ == "__main__":
 
     name_def = '0.1'
-    args = {'train': BASE_PATH + name_def + '.tr.csv',
-            'test': BASE_PATH + name_def + '.test.csv',
-            'submit': BASE_PATH + name_def + '.test.pred.csv',
+    args = {'train': BASE_PATH+'train.tsv',
+            'test': BASE_PATH + 'test.tsv',
+            'submit': BASE_PATH + name_def + 'submission.csv',
             'seed': 42,
             'min_occurs': 3,
             'good_features': []}
-
+    
     if len(sys.argv) >= 2:
         args['train'] = sys.argv[1]
-
+    
     if len(sys.argv) >= 3:
         args['test'] = sys.argv[2]
-
+    
     if len(sys.argv) >= 4:
         args['submit'] = sys.argv[3]
-
+    
     if len(sys.argv) >= 5:
         args['seed'] = int(sys.argv[4])
-
+    
     if len(sys.argv) >= 6:
         args['min_occurs'] = int(sys.argv[5])
-
+    
     if len(sys.argv) >= 7:
         args['good_features'] = [int(val) for val in sys.argv[6].split(',')]
-
+    
     if len(args['good_features']) == 0:
         args['good_features'] = None
-
+    
     print(args)
     main(**args)
