@@ -104,14 +104,22 @@ def main(train, test, submit, seed, min_occurs, good_features):
     
     num_train = np.shape(train_data)[0]
     
-    # convert boilerplate to something useful
+    # convert boilerplate to bag of words for title, body and url
     for ii, cur in enumerate(('title', 'body', 'url')):
         curData = [json.loads(x)[cur] if cur in json.loads(x) else None for x in all_data['boilerplate']]
         curData = ['empty' if x==None else x for x in curData]
-        bow = feature_extraction.text.CountVectorizer(stop_words='english', min_df=1)
+        bow = feature_extraction.text.CountVectorizer(stop_words='english', min_df=3)
         bow.fit_transform(curData)
-        all_data[cur+'_bow'] = pd.Series(bow)
+        all_data = pd.concat((all_data, pd.DataFrame(bow.todense())), axis=1)
     all_data = all_data.drop(['boilerplate'])
+    
+    # clustering
+    for clusters in (5, 10, 50):
+        kproto = kmodes.KPrototypes(clusters)
+        Xnum = all_data
+        Xcat = all_data
+        kproto.cluster([Xnum, Xcat], preRuns=5, prePctl=50, initMethod='Huang')
+        all_data = pd.concat((all_data, kproto.clusters), axis=1)
     
     # Transform data
     print("Transforming data (%i instances)..." % num_train)
