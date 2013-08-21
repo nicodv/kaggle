@@ -23,6 +23,7 @@ def dict_encode(encoding, value):
     encoding[value] = enc
     return encoding
 
+
 def dict_decode(encoding, value, min_occurs):
     enc = encoding[value]
     if enc['count'] < min_occurs:
@@ -30,6 +31,7 @@ def dict_decode(encoding, value, min_occurs):
         return -1
     else:
         return enc['code']
+
 
 def group_data(data, degree, min_occurs):
     m, n = data.shape
@@ -42,6 +44,7 @@ def group_data(data, degree, min_occurs):
         new_data.append([dict_decode(encoding, tuple(v), min_occurs) for v in data[:, indexes]])
     return np.array(new_data).T
 
+
 def one_hot_encoder(data, keymap=None):
     '''
     one_hot_encoder takes data matrix with categorical columns and
@@ -49,7 +52,7 @@ def one_hot_encoder(data, keymap=None):
     Returns sparse binary matrix and keymap mapping categories to indicies.
     If a keymap is supplied on input it will be used instead of creating one
     and any categories appearing in the data that are not in the keymap are ignored
-	'''
+    '''
     if keymap is None:
         keymap = []
         for col in data.T:
@@ -68,6 +71,7 @@ def one_hot_encoder(data, keymap=None):
     outdat = sparse.hstack(outdat).tocsr()
     return outdat, keymap
 
+
 def create_test_submission(filename, urlids, predictions):
     content = ['urlid,label']
     for i, p in enumerate(predictions):
@@ -76,6 +80,7 @@ def create_test_submission(filename, urlids, predictions):
     f.write('\n'.join(content))
     f.close()
     print('Saved')
+
 
 def cv_loop(X, y, model, N, seed):
     mean_auc = 0.
@@ -87,6 +92,7 @@ def cv_loop(X, y, model, N, seed):
         #print("AUC (fold %d/%d): %f" % (i + 1, N, auc))
         mean_auc += auc
     return mean_auc / N
+
 
 def main(train, test, submit, seed, min_occurs, good_features):
     
@@ -108,9 +114,9 @@ def main(train, test, submit, seed, min_occurs, good_features):
     for ii, cur in enumerate(('title', 'body', 'url')):
         curData = [json.loads(x)[cur] if cur in json.loads(x) else None for x in all_data['boilerplate']]
         curData = ['empty' if x==None else x for x in curData]
-        bow = feature_extraction.text.CountVectorizer(stop_words='english', min_df=3)
+        bow = feature_extraction.text.CountVectorizer(stop_words='english', min_df=10)
         bow.fit_transform(curData)
-        all_data = pd.concat((all_data, pd.DataFrame(bow.todense())), axis=1)
+        all_data = pd.concat((all_data, pd.DataFrame(bow.todense())), axis=1, ignore_index=True)
     all_data = all_data.drop(['boilerplate'])
     
     # clustering
@@ -119,7 +125,7 @@ def main(train, test, submit, seed, min_occurs, good_features):
         Xnum = all_data
         Xcat = all_data
         kproto.cluster([Xnum, Xcat], preRuns=5, prePctl=50, initMethod='Huang')
-        all_data = pd.concat((all_data, kproto.clusters), axis=1)
+        all_data = pd.concat((all_data, kproto.clusters), axis=1, ignore_index=True)
     
     # Transform data
     print("Transforming data (%i instances)..." % num_train)
