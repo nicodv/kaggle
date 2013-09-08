@@ -115,7 +115,7 @@ def main(train, test, submit, seed, min_occurs, good_features):
         curData = [json.loads(x)[cur] if cur in json.loads(x) else None for x in all_data['boilerplate']]
         curData = ['empty' if x==None else x for x in curData]
         bow = feature_extraction.text.CountVectorizer(stop_words='english', min_df=10)
-        bow.fit_transform(curData)
+        bow = bow.fit_transform(curData)
         all_data = pd.concat((all_data, pd.DataFrame(bow.todense())), axis=1, ignore_index=True)
     all_data = all_data.drop(['boilerplate'])
     
