@@ -110,6 +110,7 @@ def main(train, test, submit, seed, min_occurs, good_features):
     
     num_train = np.shape(train_data)[0]
     
+    #data["boilerplate_text"] = data["boilerplate"].map(lambda x: " ".join(filter(None,ujson.loads(x).values())))
     # convert boilerplate to bag of words for title, body and url
     for ii, cur in enumerate(('title', 'body', 'url')):
         curData = [json.loads(x)[cur] if cur in json.loads(x) else None for x in all_data['boilerplate']]
