@@ -1,8 +1,5 @@
 *.py[cod]
 
-# 2to3 backups
-*.bak
-
 # C extensions
 *.so
 
@@ -36,3 +33,4 @@ nosetests.xml
 .mr.developer.cfg
 .project
 .pydevproject
+.idea
