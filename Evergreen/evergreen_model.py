@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import sys
 import random
 import time
@@ -168,7 +170,7 @@ def main(train, test, submit, seed, min_occurs, good_features):
         good_features = set([])
 
         # Feature selection loop
-        f_remain = range(len(Xts))
+        f_remain = list(range(len(Xts)))
         cur_best_score = -1
         cur_best_score_thres = 1.0
         while len(score_hist) < 2 or score_hist[-1][0] > score_hist[-2][0]:
@@ -251,27 +253,6 @@ if __name__ == "__main__":
             'seed': 42,
             'min_occurs': 3,
             'good_features': []}
-
-    if len(sys.argv) >= 2:
-        args['train'] = sys.argv[1]
-
-    if len(sys.argv) >= 3:
-        args['test'] = sys.argv[2]
-
-    if len(sys.argv) >= 4:
-        args['submit'] = sys.argv[3]
-
-    if len(sys.argv) >= 5:
-        args['seed'] = int(sys.argv[4])
-
-    if len(sys.argv) >= 6:
-        args['min_occurs'] = int(sys.argv[5])
-
-    if len(sys.argv) >= 7:
-        args['good_features'] = [int(val) for val in sys.argv[6].split(',')]
-
-    if len(args['good_features']) == 0:
-        args['good_features'] = None
 
     print(args)
     main(**args)
