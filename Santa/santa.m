@@ -1,3 +1,4 @@
+function santa()
 %% Packing Santa's Sleigh Kaggle Competition
 % author: Nico de Vos
 % 
@@ -13,6 +14,7 @@ benchmark = 1;
 
 %% Importing Data
 presents = load('presents.mat');
+presents = presents.presents;
 
 % Save the columns as separate arrays, representing the IDs, widths,
 % lengths, heights and orientation of each present
@@ -32,7 +34,7 @@ presentOrient = ones(size(presentID));
 numPresents = size(presents, 1);
 
 %% Benchmark
-if benchmark = 1;
+if benchmark == 1;
     % One possible approach would be to place the boxes in order going from top
     % to bottom.  This will have the advantage of having 0 penalty for the
     % ordering part of the metric, however the total height will likely not be
@@ -69,7 +71,7 @@ if benchmark = 1;
         end
         
         % Fill present coordinate matrix
-        presentCoords(i,1) = presentIDs(i);
+        presentCoords(i,1) = presentID(i);
         presentCoords(i,[2 8 14 20]) = xs;
         presentCoords(i,[5 11 17 23]) = xs + presentWidth(i) - 1;
         presentCoords(i,[3 6 15 18]) = ys;
@@ -81,8 +83,8 @@ if benchmark = 1;
         xs = xs + presentWidth(i);
         numInRow = numInRow+1;
         numInLayer = numInLayer+1;
-        lastRowIdxs(numInRow) = presentIDs(i);
-        lastLayerIdxs(numInLayer) = presentIDs(i);
+        lastRowIdxs(numInRow) = presentID(i);
+        lastLayerIdxs(numInLayer) = presentID(i);
     end
 
     % We started at z = -1 and went downward, need to shift so all z-values >= 1
@@ -90,7 +92,7 @@ if benchmark = 1;
     minZ = min(zCoords(:));
     presentCoords(:,4:3:end) = zCoords - minZ + 1;
     benchmarkScore = evaluate(presentCoords);
-
+end
 
 %% Initialization
 % What follows is a smart initialization procedure that uses the correct order
@@ -113,11 +115,13 @@ gMat = zeros(width, length);
 
 
 % function for determining the sum of free box surfaces
-surface = @(H) sum(diff(H, 1, 1)(:)) + sum(diff(H, 1, 2)(:)) + prod(size(H));
+surface = @(H) sum(reshape(diff(H, 1, 1),1,[])) + ...
+    sum(reshape(diff(H, 1, 2),1,[])) + numel(size(H));
 meanH = mean(hMat(:));
 varH = var(hMat(:));
 surfaceH = surface(hMat);
 
+end
 
 function metric = evaluate(coords)
 % Compute evaluation metric that expresses how well Santa's sleigh is
@@ -126,7 +130,7 @@ function metric = evaluate(coords)
 % metric  = 2 * max(z-coordinates) + sigma(order)
 
 % Ideal order is the original order
-idealOrder = 1:1e6;
+idealOrder = [1:1e6]';
 
 numPresents = size(coords, 1);
 
@@ -150,6 +154,7 @@ order = sum(abs(idealOrder - reOrder));
 % Finally compute metric
 metric = 2 * maxZ + order;
 
+end
 
 function fillrate(coords)
 % Calculate the fill rate of the sleigh
@@ -157,9 +162,9 @@ function fillrate(coords)
 maxX = max(max(coords(:,2:3:end-2)));
 maxY = max(max(coords(:,3:3:end-1)));
 maxZ = max(max(coords(:,4:3:end)));
+end
 
-
-function createSubmission(filename, presentCoords)
+function createsubmission(filename, presentCoords)
 % Use fprintf to write the header, present IDs, and coordinates to a CSV file.
 fileID = fopen(filename, 'w');
 headers = {'PresentId','x1','y1','z1','x2','y2','z2','x3','y3','z3',...
@@ -167,10 +172,11 @@ headers = {'PresentId','x1','y1','z1','x2','y2','z2','x3','y3','z3',...
            'x8','y8','z8'};
 fprintf(fileID,'%s,',headers{1,1:end-1});
 fprintf(fileID,'%s\n',headers{1,end});
-fprintf(fileID,strcat('%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,'...
+fprintf(fileID,strcat('%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,',...
         '%d,%d,%d,%d,%d,%d,%d,%d,%d\n'),presentCoords');
 fclose(fileID);
 
 % make a zipped version too for easy uploading
 zipfile = strrep(filename, '.csv', '.zip');
 zip(zipfile, filename);
+end
