@@ -4,8 +4,6 @@
 % Initial analysis shows:
 % X, Y and Z sizes range from 2 to 250, mean is 50, std. dev. is 62
 % smallest box is 2x2x2, largest 247x249x250
-% For reference: 20x20x2500 perfectly ordered boxes
-% of size 50x50x50 would score 125,000.
 
 %% Settings
 width = 1000;
