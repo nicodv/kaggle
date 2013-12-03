@@ -31,10 +31,8 @@ presentOrient = ones(size(presentID));
 
 numPresents = size(presents, 1);
 
-%% Initialization
-
+%% Benchmark
 if benchmark = 1;
-    %% A Naive Approach
     % One possible approach would be to place the boxes in order going from top
     % to bottom.  This will have the advantage of having 0 penalty for the
     % ordering part of the metric, however the total height will likely not be
@@ -94,6 +92,7 @@ if benchmark = 1;
     benchmarkScore = evaluate(presentCoords);
 
 
+%% Initialization
 % What follows is a smart initialization procedure that uses the correct order
 % of presents, and encourages a strategy that is better in the long term by:
 % - minimizing the average height (obvious)
@@ -149,7 +148,7 @@ reOrder = maxzCoordSorted(:,1);
 order = sum(abs(idealOrder - reOrder));
 
 % Finally compute metric
-metric = 2*maxZ + order;
+metric = 2 * maxZ + order;
 
 
 function fillrate(coords)
