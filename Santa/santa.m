@@ -18,20 +18,20 @@ presents = presents.presents;
 
 % Save the columns as separate arrays, representing the IDs, widths,
 % lengths, heights and orientation of each present
-presentID = presents(:,1);
-presentWidth = presents(:,2);
-presentLength = presents(:,3);
-presentHeight = presents(:,4);
+ID = presents(:,1);
+width = presents(:,2);
+length = presents(:,3);
+height = presents(:,4);
 % Note: there are 6 possible orientations, set to 1, meaning the original one
-% 1 = WLH, Width * Length * Height
+% 1 = WLH, width * length * height
 % 2 = WHL
 % 3 = HLW
 % 4 = LWH
 % 5 = HWL
 % 6 = LHW
-presentOrient = ones(size(presentID));
+orient = ones(size(ID));
 
-numPresents = size(presents, 1);
+nPresents = size(presents, 1);
 
 %% Benchmark
 if benchmark == 1;
@@ -50,48 +50,48 @@ if benchmark == 1;
     lastLayerIdxs = zeros(500,1); % Buffer for storing layer indices
     numInRow = 0;
     numInLayer = 0;
-    % PresentID and 8 sets of coordinates per present
-    presentCoords = zeros(numPresents,25);
+    % ID and 8 sets of coordinates per present
+    coords = zeros(nPresents,25);
 
-    for i = 1:numPresents
+    for i = 1:nPresents
         % Move to the next row if there isn't room
-        if xs + presentWidth(i) > width + 1 % exceeded allowable width
+        if xs + width(i) > width + 1 % exceeded allowable width
             % increment y to ensure no overlap
-            ys = ys + max(presentLength(lastRowIdxs(1:numInRow)));
+            ys = ys + max(length(lastRowIdxs(1:numInRow)));
             xs = 1;
             numInRow = 0;
         end
         % Move to the next layer if there isn't room
-        if ys + presentLength(i) > length + 1 % exceeded allowable length
+        if ys + length(i) > length + 1 % exceeded allowable length
             % increment z to ensure no overlap
-            zs = zs - max(presentHeight(lastLayerIdxs(1:numInLayer)));
+            zs = zs - max(height(lastLayerIdxs(1:numInLayer)));
             xs = 1;
             ys = 1;
             numInLayer = 0;
         end
         
         % Fill present coordinate matrix
-        presentCoords(i,1) = presentID(i);
-        presentCoords(i,[2 8 14 20]) = xs;
-        presentCoords(i,[5 11 17 23]) = xs + presentWidth(i) - 1;
-        presentCoords(i,[3 6 15 18]) = ys;
-        presentCoords(i,[9 12 21 24]) = ys + presentLength(i) - 1;
-        presentCoords(i,[4 7 10 13]) = zs;
-        presentCoords(i,[16 19 22 25]) = zs - presentHeight(i) + 1;
+        coords(i,1) = ID(i);
+        coords(i,[2 8 14 20]) = xs;
+        coords(i,[5 11 17 23]) = xs + width(i) - 1;
+        coords(i,[3 6 15 18]) = ys;
+        coords(i,[9 12 21 24]) = ys + length(i) - 1;
+        coords(i,[4 7 10 13]) = zs;
+        coords(i,[16 19 22 25]) = zs - height(i) + 1;
 
         % Update location info
-        xs = xs + presentWidth(i);
+        xs = xs + width(i);
         numInRow = numInRow+1;
         numInLayer = numInLayer+1;
-        lastRowIdxs(numInRow) = presentID(i);
-        lastLayerIdxs(numInLayer) = presentID(i);
+        lastRowIdxs(numInRow) = ID(i);
+        lastLayerIdxs(numInLayer) = ID(i);
     end
 
     % We started at z = -1 and went downward, need to shift so all z-values >= 1
-    zCoords = presentCoords(:,4:3:end);
+    zCoords = coords(:,4:3:end);
     minZ = min(zCoords(:));
-    presentCoords(:,4:3:end) = zCoords - minZ + 1;
-    benchmarkScore = evaluate(presentCoords);
+    coords(:,4:3:end) = zCoords - minZ + 1;
+    benchmarkScore = evaluate(coords);
 end
 
 %% Initialization
@@ -105,23 +105,63 @@ end
 %
 % Initialization is done only once, so we're going to approach it a bit brute-force.
 
+% function for determining the sum of free box surfaces
+surface = @(H) sum(reshape(diff(H, 1, 1),1,[])) + ...
+    sum(reshape(diff(H, 1, 2),1,[])) + numel(size(H));
+
+orientOrder = zeros(nPresents, 6);
+
 % matrix with heights per column
 hMat = zeros(width, length);
 
 % matrix with total gaps per column
 gMat = zeros(width, length);
 
-%% Statistics and plots initialization
+for i = 1:nPresents
+    % determine preferred order of orientation: we prefer to place
+    % presents as flat as possible (but no preference in x-y dimensions)
+    % 1 = WLH, width * length * height
+    % 2 = LWH
+    % 3 = WHL
+    % 4 = HWL
+    % 5 = LHW
+    % 6 = HLW
+    minHLW = min(height(i), length(i), width(i));
+    minHL = min(height(i), length(i));
+    minHW = min(height(i), width(i));
+    minLW = min(length(i), width(i));
+    if height(i) == minHLW
+        if length(i) == minLW
+            orientOrder(i,:) = [1 2 3 4 5 6];
+        else
+            orientOrders(i,:) = [1 2 5 6 3 4];
+    else if length(i) == minHLW
+        if height(i) == minHW
+            orientOrder(i,:) = [3 4 1 2 5 6];
+        else
+            orientOrders(i,:) = [3 4 5 6 1 2];
+    else if width(i) == minHLW
+        if length(i) == minHL
+            orientOrder(i,:) = [5 6 3 4 1 2];
+        else
+            orientOrders(i,:) = [5 6 1 2 3 4];
+    end
+    
+    % we also prefer a present placed against either another present, or on the
+    % borders of the sleigh (this reduces complexity, hopefully still smart enough)
+    potentialCoords = 
 
+end
 
-% function for determining the sum of free box surfaces
-surface = @(H) sum(reshape(diff(H, 1, 1),1,[])) + ...
-    sum(reshape(diff(H, 1, 2),1,[])) + numel(size(H));
 meanH = mean(hMat(:));
 varH = var(hMat(:));
 surfaceH = surface(hMat);
 
+
+%% Statistics and plots regarding initialization
+
 end
+
 
 function metric = evaluate(coords)
 % Compute evaluation metric that expresses how well Santa's sleigh is
@@ -132,15 +172,15 @@ function metric = evaluate(coords)
 % Ideal order is the original order
 idealOrder = [1:1e6]';
 
-numPresents = size(coords, 1);
+nPresents = size(coords, 1);
 
 % Determine the max z-coordinate; this is the max height of the sleigh
 maxZ = max(max(coords(:,4:3:end)));
 
 % Go down the layers from top to bottom, reorder presents
 % in numeric order for each layer
-maxZCoord = zeros(numPresents,2);
-for i = 1:numPresents
+maxZCoord = zeros(nPresents,2);
+for i = 1:nPresents
     maxZCoord(i,1) = coords(i);
     maxZCoord(i,2) = max(coords(i,4:3:end));
 end
@@ -156,27 +196,32 @@ metric = 2 * maxZ + order;
 
 end
 
+
 function fillrate(coords)
 % Calculate the fill rate of the sleigh
 % Determine the max coordinates
 maxX = max(max(coords(:,2:3:end-2)));
 maxY = max(max(coords(:,3:3:end-1)));
 maxZ = max(max(coords(:,4:3:end)));
+
 end
 
-function createsubmission(filename, presentCoords)
+
+function createsubmission(filename, coords)
 % Use fprintf to write the header, present IDs, and coordinates to a CSV file.
 fileID = fopen(filename, 'w');
-headers = {'PresentId','x1','y1','z1','x2','y2','z2','x3','y3','z3',...
+headers = {'ID','x1','y1','z1','x2','y2','z2','x3','y3','z3',...
            'x4','y4','z4','x5','y5','z5','x6','y6','z6','x7','y7','z7',...
            'x8','y8','z8'};
 fprintf(fileID,'%s,',headers{1,1:end-1});
 fprintf(fileID,'%s\n',headers{1,end});
 fprintf(fileID,strcat('%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,',...
-        '%d,%d,%d,%d,%d,%d,%d,%d,%d\n'),presentCoords');
+        '%d,%d,%d,%d,%d,%d,%d,%d,%d\n'),coords');
 fclose(fileID);
 
 % make a zipped version too for easy uploading
 zipfile = strrep(filename, '.csv', '.zip');
 zip(zipfile, filename);
+
 end
+
