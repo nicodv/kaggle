@@ -203,7 +203,55 @@ if encapsVol > 0
 end
 
 
-%% Submission
+%% Check Result and Submission
+function collisiondetection(coords)
+
+% Sort by max z-coord for each present
+minmaxXYZSorted = sortrows(minmaxXYZCoords,-7);
+
+nPresents = size(coords, 1);
+% Compare present i against other presents, checking for collision
+for i = 1:nPresents
+    for j = i+1:nPresents
+        % Test for collision on z-axis first, since sorted
+        minZi = minmaxXYZSorted(i,1,3); 
+        maxZj = minmaxXYZSorted(j,2,3); 
+        if minZi > maxZj
+            % No overlap on z-axis implies no collision
+            break
+        end
+        
+        % Test for collision on x-axis
+        minXi = minmaxXYZSorted(i,1,1);        
+        minXj = minmaxXYZSorted(j,1,1);
+        maxXi = minmaxXYZSorted(i,2,1); 
+        maxXj = minmaxXYZSorted(j,2,1);         
+        if or(maxXi < minXj, minXi > maxXj)
+            % No overlap on x-axis implies no collision
+            continue
+        end
+        
+        % Test for collision on y-axis
+        minYi = minmaxXYZSorted(i,1,2); 
+        minYj = minmaxXYZSorted(j,1,2); 
+        maxYi = minmaxXYZSorted(i,2,2); 
+        maxYj = minmaxXYZSorted(j,2,2); 
+        if or(maxYi < minYj, minYi > maxYj)
+            % No overlap on y-axis implies no collision
+            continue
+        end
+        
+        % Overlap on x, y, and z axes indicates collision
+        fprintf('Collision check FAILED: packages %d and %d collided\n',...
+            minmaxXYZSorted(i,1),minmaxXYZSorted(j,1));
+        return
+    end
+end
+fprintf('Collision check PASSED');
+
+end
+
+
 function createsubmission(filename, coords)
 
     function allCoords = allcorners()
