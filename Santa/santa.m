@@ -82,20 +82,24 @@ if benchmark == 1;
     zCoords = coords(:,:,3);
     minZ = min(zCoords(:));
     coords(:,:,3) = zCoords - minZ + 1;
-    benchmarkScore = evaluate(coords);
+    benchmarkScore = evaluate(coords)
 end
 
 
-%% Initialization
-% What follows is a smart initialization procedure that uses the correct order
-% of presents, and encourages a strategy that is better in the long term by:
+%% Heuristic Algorithm
+% A smart heuristic encourages a strategy that is better in the long term by:
 % - minimizing the average height (obvious)
 % - minimizing the standard deviation of the height (i.e., the surface on which
 %   to place new presents is as flat/smooth as possible)
 % - minimizing free present surface (i.e., the presents are placed against each
 %   other with as few gaps as possible)
 %
-% Initialization is done only once, so we're going to approach it a bit brute-force.
+% Other ideas:
+% - The order is taken into account because the list is already sorted.
+% - An ordering of subgroups of present according to their volumes might help
+%   in staying away from local optima. Sum of volumes determines how many presents
+%   will be considered at once in a group.
+% - Somehow only consider placing presents aligned with other presents.
 
 % function for determining the sum of free box surfaces
 surface = @(H) sum(reshape(diff(H, 1, 1),1,[])) + ...
