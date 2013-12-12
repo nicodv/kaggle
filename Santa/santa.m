@@ -4,8 +4,8 @@ function santa()
 
 
 %% Settings
-width = 1000;
-length = 1000;
+xlen = 1000;
+ylen = 1000;
 % Calculate benchmark?
 benchmark = 1;
 
@@ -22,7 +22,7 @@ length = presents(:,3);
 height = presents(:,4);
 volume = width .* length .* height;
 % this is the size of the largest side of the packages
-max2dsurf = max(width .* length, length .* height, width .* height);
+max2dsurf = max([width .* length, length .* height, width .* height], [], 2);
 % Note: there are 6 possible orientations, set to 1, meaning the original one
 orient = ones(size(ID));
 
@@ -51,14 +51,14 @@ if benchmark == 1;
 
     for i = 1:nPresents
         % Move to the next row if there isn't room
-        if xs + width(i) > width + 1 % exceeded allowable width
+        if xs + width(i) > xlen + 1 % exceeded allowable width
             % increment y to ensure no overlap
             ys = ys + max(length(lastRowIdxs(1:numInRow)));
             xs = 1;
             numInRow = 0;
         end
         % Move to the next layer if there isn't room
-        if ys + length(i) > length + 1 % exceeded allowable length
+        if ys + length(i) > ylen + 1 % exceeded allowable length
             % increment z to ensure no overlap
             zs = zs - max(height(lastLayerIdxs(1:numInLayer)));
             xs = 1;
@@ -122,7 +122,7 @@ for i = 1:nPresents
     % 4 = HWL
     % 5 = LHW
     % 6 = HLW
-    minHLW = min(height(i), length(i), width(i));
+    minHLW = min([height(i) length(i) width(i)]);
     minHL = min(height(i), length(i));
     minHW = min(height(i), width(i));
     minLW = min(length(i), width(i));
@@ -131,16 +131,19 @@ for i = 1:nPresents
             orientOrder(i,:) = [1 2 3 4 5 6];
         else
             orientOrders(i,:) = [1 2 5 6 3 4];
-    else if length(i) == minHLW
+        end
+    elseif length(i) == minHLW
         if height(i) == minHW
             orientOrder(i,:) = [3 4 1 2 5 6];
         else
             orientOrders(i,:) = [3 4 5 6 1 2];
-    else if width(i) == minHLW
+        end
+    elseif width(i) == minHLW
         if length(i) == minHL
             orientOrder(i,:) = [5 6 3 4 1 2];
         else
             orientOrders(i,:) = [5 6 1 2 3 4];
+        end
     end
     
     % we also prefer a present placed against either another present, or on the
@@ -175,7 +178,7 @@ maxZ = max(max(coords(:,2,3)));
 maxZCoord = zeros(nPresents,2);
 for i = 1:nPresents
     maxZCoord(i,1) = i;
-    maxZCoord(i,2) = max(squeeze(coords(i,:,3)));
+    maxZCoord(i,2) = max(coords(i,:,3));
 end
 %sort max z-coord for each present
 maxzCoordSorted = sortrows(maxZCoord,[-2 1]);
@@ -204,6 +207,8 @@ gaps = sum(gMat(:)) + sum(sum(abs(hMat - maxZ)));
 
 if encapsVol > 0
     fRate = (encapsVol - gaps) / encapsVol;
+end
+
 end
 
 
