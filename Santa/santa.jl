@@ -1,93 +1,225 @@
-using DataFrames
-using DataArrays
-using Stats
-using NumericExtensions
+# Packing Santa's Sleigh, Kaggle competition
+# author: Nico de Vos
 
-# Import the data and set up data frames
-presents = readtable("data/presents.csv")
+using DataFrames
+using NumericExtensions
+using Stats
+
+
+##### Settings #####
+sleighWidth = 1000
+sleighLength = 1000
+# Calculate benchmarks?
+benchmark = 1
+
+
+##### Import and prepare data #####
+# read into DataFrame
+presents = readtable("presents.csv")
 
 nPresents = nrow(presents)
 
 ID = presents["PresentId"]
 width = presents["Dimension1"]
-Length = presents["Dimension2"]
+length = presents["Dimension2"]
 height = presents["Dimension3"]
 
-volume = width .* length .* height
-minVol = minimum(volume)
-maxVol = maximum(volume)
+volume = dot(width, length, height)
+# the size of the largest side of the presents
+max2dsurf = maximum([dot(width, length); dot(length, height); dot(width, height)], 1)
+# Note: there are 6 possible orientations, initialize to 1, meaning the original one
+orient = fill(1, nPresents)
 
-# Solution
-sleighWidth = 1000
-sleighLength = 1000
 
-xs = 1
-ys = 1
-zs = 1
+##### Benchmark #####
+if benchmark = 1
+    # Initial coordinates for placing presents
+    xs, ys = 1
+    zs = -1
 
-lastRowIdxs = fill!([1:1000],0)
-lastLayerIdxs = fill!([1:1000],0)
+    lastRowIdxs = zeros(UInt, 500)
+    lastLayerIdxs = zeros(UInt, 500)
+    numInRow = 0
+    numInLayer = 0
 
-numInRow = 0
-numInLayer = 0
+    # the 2 extreme coordinates per present
+    coords = zeros(UInt, (nPresents, 2, 3))
 
-coords = DataFrame(PresentId = fill!([1:nPresents],0), x1 = fill!([1:nPresents],0), y1 = fill!([1:nPresents],0), z1 = fill!([1:nPresents],0), x2 = fill!([1:nPresents],0), y2 = fill!([1:nPresents],0), z2 = fill!([1:nPresents],0), x3 = fill!([1:nPresents],0), y3 = fill!([1:nPresents],0), z3 = fill!([1:nPresents],0), x4 = fill!([1:nPresents],0), y4 = fill!([1:nPresents],0), z4 = fill!([1:nPresents],0), x5 = fill!([1:nPresents],0), y5 = fill!([1:nPresents],0), z5 = fill!([1:nPresents],0), x6 = fill!([1:nPresents],0), y6 = fill!([1:nPresents],0), z6 = fill!([1:nPresents],0), x7 = fill!([1:nPresents],0), y7 = fill!([1:nPresents],0), z7 = fill!([1:nPresents],0), x8 = fill!([1:nPresents],0), y8 = fill!([1:nPresents],0), z8 = fill!([1:nPresents],0))
+    for i in 1:nPresents
 
-for (i in 1:nPresents)
+        # Move to the next row if there isn't room
+        if (xs + width[i] > sleighWidth + 1)
+            # exceeded allowable width
+            # increment y to ensure no overlap
+            ys = ys + maximum(length[lastRowIdxs[1:numInRow]])
+            xs = 1
+            numInRow = 0
+        end
 
-    # Move to the next row if there isn't room
-    if (xs + width[i] > sleighWidth + 1)
-        # exceeded allowable width
-        ys = ys + maximum(length[lastRowIdxs[1:numInRow]]) # increment y to ensure no overlap
-        xs = 1
-        numInRow = 1
+        # Move to the next layer if there isn't room
+        if (ys + length[i] > sleighLength + 1)
+            # exceeded allowable length
+            # increment z to ensure no overlap
+            zs = zs - maximum(height[lastLayerIdxs[1:numInLayer]])
+            xs, ys = 1
+            numInLayer = 0
+        end
+
+        # Fill present coordinate matrix
+        coords[i,1,:] = [xs ys zs]
+        coords[i,2,:] = [xs+width[i]-1 ys+length[i]-1 zs-height[i]+1]
+
+        # Update location info
+        xs = xs + width[i]
+        numInRow = numInRow + 1
+        numInLayer = numInLayer + 1
+        lastRowIdxs[numInRow] = ID[i]
+        lastLayerIdxs[numInLayer] = ID[i]
+
     end
 
-    # Move to the next layer if there isn't room
-    if (ys + length[i] > sleighLength + 1)
-        # exceeded allowable length
-        zs = zs - maximum(height[lastLayerIdxs[1:numInLayer]]) # increment z to ensure no overlap
-        xs = 1
-        ys = 1
-        numInLayer = 0
-    end
+    # We started at z = -1 and went downward, need to shift so all z-values >= 1
+    zCoords = coords[:,:,3]
+    minZ = minimum(zCoords)
+    coords[:,:,3] = zCoords - minZ + 1
 
-    # Fill present coordinate matrix
-    coords[i,1] = presentIDs[i]
-    coords[i,[2,8,14,20]] = xs
-    coords[i,[5,11,17,23]] = xs + width[i] - 1
-    coords[i,[3,6,15,18]] = ys
-    coords[i,[9,12,21,24]] = ys + length[i] - 1
-    coords[i,[4,7,10,13]] = zs
-    coords[i,[16,19,22,25]] = zs - height[i] + 1
-
-    # Update location info
-    xs = xs + width[i]
-    numInRow = numInRow + 1
-    numInLayer = numInLayer + 1
-    lastRowIdxs[numInRow] = presentIDs[i]
-    lastLayerIdxs[numInLayer] = presentIDs[i]
+    benchmarkScore = calcscore(coords)
+    println("Benchmark score: $benchmarkScore")
 
 end
 
-# We started at z = -1 and went downward, need to shift so all z-values >= 1
-zCoords = coords[1:end,[4,7,10,13,16,19,22,25]]
-minZ = minimum([coords["z1"],coords["z2"],coords["z3"],coords["z4"],coords["z5"],coords["z6"],coords["z7"],coords["z8"]])
-coords[1:end,[4,7,10,13,16,19,22,25]] = zCoords - minZ + 1
 
-# Evaluation metric
-function getScore(submission)
+##### Heuristic algorithm #####
+# A smart heuristic encourages a strategy that is better in the long term by:
+# - minimizing the average height (obvious)
+# - minimizing the standard deviation of the height (i.e., the surface on which
+# to place new presents is as flat/smooth as possible)
+# - minimizing free present surface (i.e., the presents are placed against each
+# other with as few gaps as possible)
+#
+# Other ideas:
+# - The order is taken into account because the array is already sorted in order.
+# - An ordering of subgroups of present according to their volumes might help
+#   in staying away from local optima. Sum of largest surfaces determines how many
+#   presents will be considered at once in a group.
+# - Somehow only consider placing presents aligned with other presents.
 
-submission_Z = submission[1:end,[1,4,7,10,13,16,19,22,25]]
-submission_Z["maxZ"] = max(submission["z1"],submission["z2"],submission["z3"],submission["z4"],submission["z5"],submission["z6"],submission["z7"],submission["z8"])
-sort!(submission_Z, cols=(order("maxZ", rev=true),"PresentId"))
-submission_Z["presentOrder"] = 1:nrow(submission_Z)
+# matrix with current heights per column
+H = zeros(UInt, (sleighWidth, sleighLength))
 
-println("Evaluation metric score is: ", 2 * maximum(submission_Z["maxZ"] + sum(abs(submission_Z["PresentId"] - submission_Z["presentOrder"]))))
+# matrix with total gaps per column
+G = zeros(UInt, (sleighWidth, sleighLength))
+
+orientOrder = zeros(UInt, (nPresents, 6));
+
+for i = 1:nPresents
+    # determine preferred order of orientation: we prefer to place
+    # presents as flat as possible (no preference in x/y dimensions)
+    # 1 = WLH, width * length * height
+    # 2 = LWH
+    # 3 = WHL
+    # 4 = HWL
+    # 5 = LHW
+    # 6 = HLW
+    minHLW = min([height(i) length(i) width(i)])
+    minHL = min(height(i), length(i))
+    minHW = min(height(i), width(i))
+    minLW = min(length(i), width(i))
+    if height(i) = minHLW
+        if length(i) = minLW
+            orientOrder[i,:] = [1 2 3 4 5 6]
+        else
+            orientOrder[i,:] = [1 2 5 6 3 4]
+        end
+    elseif length(i) = minHLW
+        if height(i) = minHW
+            orientOrder[i,:] = [3 4 1 2 5 6]
+        else
+            orientOrder[i,:] = [3 4 5 6 1 2]
+        end
+    elseif width(i) = minHLW
+        if length(i) = minHL
+            orientOrder[i,:] = [5 6 3 4 1 2]
+        else
+            orientOrder[i,:] = [5 6 1 2 3 4]
+        end
+    end
+    
+    # we also prefer a present placed against either another present, or on the
+    # borders of the sleigh (this reduces complexity, hopefully still smart enough)
 
 end
 
-# Output score and save solution
-getScore(coords)
-writetable("data/output.csv", coords)
-println("Solution saved to data/output.csv")
+
+##### Statistics #####
+function objective(H, G)
+
+    # function for determining the sum of free box surfaces
+    # note: gaps are overweighted since they each count for 8 surfaces
+    # even when multiple gaps are connected
+    surface(hMat, gMat) = sum(abs(diff(hMat, 1))) + sum(abs(diff(hMat, 2))) + length(hMat) + 8 * sum(gMat)
+
+    meanH = abs(mean(H))
+    varH = var(H)
+    surfaceH = surface(H, G)
+
+    # this is the aggregate objective function that weighs the individual aspects
+    objFun = meanH ^ 2 + varH + surfaceH
+
+end
+
+
+function calcscore(coords)
+    # Calculate score on competition metric
+
+    # Ideal order is the original order
+    idealOrder = [1:nPresents]
+
+    # Determine the max z-coord; this is the max height of the sleigh
+    maxZ = maximum(coords[:,2,3])
+
+    # Go down the layers from top to bottom, reorder presents
+    # in numeric order for each layer
+    maxZCoord = zeros(Int, [nPresents, 2])
+    for i = 1:nPresents
+        maxZCoord(i,1) = i
+        maxZCoord(i,2) = maximum(coords[i,:,3])
+    end
+
+    # sort max z-coord for each present
+    maxzCoordSorted = sort(maxZCoord,[-2 1])
+    reOrder = maxzCoordSorted(:,1)
+
+    # Compare the new order to the ideal order
+    order = sum(abs(idealOrder - reOrder))
+
+    # Finally compute metric
+    metric = 2*maxZ + order
+
+    println("Evaluation metric score is: $metric")
+
+end
+
+
+function fillrate(H, G)
+    # Calculate the fill rate of the sleigh
+
+    # calculate volume of smallest encapsulating box
+    maxZ = max(H)
+    encapsVol = sleighWidth * sleighLength * maxZ
+
+    # counts all gaps, including empty spaces below the maximum height
+    gaps = sum(G) + sum(abs(H - maxZ))
+
+    if (encapsVol > 0)
+        return (encapsVol - gaps) / encapsVol;
+    end
+
+end
+
+
+##### Generate submission #####
+score = calcscore(coords)
+println("Solution scored $score")
+writetable("submission.csv", coords)
+println("Solution saved")
