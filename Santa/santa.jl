@@ -32,6 +32,12 @@ orient = fill(1, nPresents)
 
 
 ##### Benchmark #####
+# matrix with current heights per column
+H = zeros(UInt, (sleighWidth, sleighLength))
+
+# matrix with total gaps per column
+G = zeros(UInt, (sleighWidth, sleighLength))
+
 if benchmark = 1
     # Initial coordinates for placing presents
     xs, ys = 1
@@ -68,6 +74,12 @@ if benchmark = 1
         # Fill present coordinate matrix
         coords[i,1,:] = [xs ys zs]
         coords[i,2,:] = [xs+width[i]-1 ys+length[i]-1 zs-height[i]+1]
+        # update height matrix
+        oldH = H[xs:xs+width[i]-1, ys:ys+length[i]-1]
+        minH = minimum(oldH)
+        H[xs:xs+width[i]-1, ys:ys+length[i]-1] += height[i]
+        # update gaps matrix
+        G[xs:xs+width[i]-1, ys:ys+length[i]-1] += oldH - minH
 
         # Update location info
         xs = xs + width[i]
@@ -83,6 +95,8 @@ if benchmark = 1
     minZ = minimum(zCoords)
     coords[:,:,3] = zCoords - minZ + 1
 
+    benchmarkFillrate = fillrate(H, G)
+    println("Benchmark fill rate: $benchmarkFillrate")
     benchmarkScore = calcscore(coords)
     println("Benchmark score: $benchmarkScore")
 
@@ -152,23 +166,6 @@ end
 
 
 ##### Statistics #####
-function objective(H, G)
-
-    # function for determining the sum of free box surfaces
-    # note: gaps are overweighted since they each count for 8 surfaces
-    # even when multiple gaps are connected
-    surface(hMat, gMat) = sum(abs(diff(hMat, 1))) + sum(abs(diff(hMat, 2))) + length(hMat) + 8 * sum(gMat)
-
-    meanH = abs(mean(H))
-    varH = var(H)
-    surfaceH = surface(H, G)
-
-    # this is the aggregate objective function that weighs the individual aspects
-    objFun = meanH ^ 2 + varH + surfaceH
-
-end
-
-
 function calcscore(coords)
     # Calculate score on competition metric
 
@@ -197,6 +194,28 @@ function calcscore(coords)
     metric = 2*maxZ + order
 
     println("Evaluation metric score is: $metric")
+
+end
+
+
+function objective(H, G)
+
+    # function for determining the sum of free box surfaces
+    # note: gaps are overweighted since they each count for 8 surfaces
+    # even when multiple gaps are connected
+    
+    # to keep things comparable, we only look at the structure 500 units from the top
+    minZ = minimum(H)
+    H = min(0, H - minZ - 500)
+
+    surface(hMat, gMat) = sum(abs(diff(hMat, 1))) + sum(abs(diff(hMat, 2))) + length(hMat) + 8 * sum(gMat)
+
+    meanH = abs(mean(H))
+    varH = var(H)
+    surfaceH = surface(H, G)
+
+    # this is the aggregate objective function that weighs the individual aspects
+    objFun = meanH ^ 2 + varH + surfaceH
 
 end
 
