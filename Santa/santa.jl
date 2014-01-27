@@ -12,6 +12,7 @@ sleighLength = 1000
 # Calculate benchmarks?
 benchmark = 1
 
+print "here"
 
 ##### Import and prepare data #####
 # read into DataFrame
