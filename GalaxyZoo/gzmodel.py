@@ -11,7 +11,7 @@ from pylearn2.termination_criteria import EpochCounter
 from pylearn2.costs.cost import MethodCost
 from sklearn.metrics.metrics import auc_score
 
-import GalaxyZoo
+import GalaxyZoo.gzdata
 
 DATA_DIR = '/home/nico/Data/GalaxyZoo/'
 
