@@ -30,7 +30,7 @@ class Whales(DenseDesignMatrix):
             y = np.zeros((X.shape[0],2))
         else:
             y = np.load(os.path.join(DATA_DIR,'targets.npy'))
-            
+        
         if start is not None:
             assert start >= 0
             assert stop > start
