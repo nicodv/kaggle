@@ -62,8 +62,8 @@ def main():
                     else:
                         scores.append(dist - 0.1 * kp.size)
 
-                if len(scores) == 0:
-                    # no keypoint found in center, just cut out a centered box, unrotated, size 240
+                if len(scores) == 0 or np.all(np.isinf(scores)):
+                    # no keypoint found in center, just cut out a centered box, unrotated
                     cntr = (211, 211)
                     rot = 0
                     diam = 256
@@ -73,13 +73,13 @@ def main():
                     diam = max(64, keyPoints[np.argmin(scores)].size)
 
                 # rotate, scale and crop the original (not grayscale) image
-                rot_mat = cv2.getRotationMatrix2D(cntr, rot + 90, (finalSize * 3/4) / diam)
+                rot_mat = cv2.getRotationMatrix2D(cntr, rot + 90, (finalSize * 0.75) / diam)
                 imr = cv2.warpAffine(im, rot_mat, list(im.shape).append(1), flags=cv2.INTER_CUBIC)
                 newimg = imr[212 - finalSize / 2:212 + finalSize / 2, 212 - finalSize / 2:212 + finalSize/2, :]
 
                 # plot
                 # im2 = cv2.drawKeypoints(im, keyPoints, None, (255, 0, 0), 4)
-                # if cnt < 50:
+                # if cnt < 20:
                 #     res = np.hstack((im, cv2.cvtColor(imc, cv2.COLOR_GRAY2BGR), im2))
                 #     plt.imshow(res), plt.show()
                 #     plt.imshow(newimg), plt.show()
