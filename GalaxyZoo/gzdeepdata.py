@@ -12,12 +12,12 @@ import GalaxyZoo.gzdeepdata
 
 DATA_DIR = '/home/nico/Data/GalaxyZoo/'
 
-SUBMODEL = 2
+SUBMODEL = 1
 
 
 class GZData(DenseDesignMatrix):
 
-    def __init__(self, which_set, start=None, stop=None, axes=('c', 0, 1, 'b')):
+    def __init__(self, which_set, start=None, stop=None, axes=('c', 0, 1, 'b'), flatgrey=False):
         assert which_set in ['training', 'test']
 
         filenames = np.load(os.path.join(DATA_DIR, 'filenumbers.npy'))
@@ -37,24 +37,45 @@ class GZData(DenseDesignMatrix):
             assert stop <= 61577
             filenames = filenames[start:stop + 1]
 
-        trainx = np.zeros((2 * len(filenames), int(self.patch_size[0] / self.scale_factor),
-                           int(self.patch_size[1] / self.scale_factor), 3))
-        for ii, fn in enumerate(filenames):
-            for jj, itype in enumerate(('raw', 'proc')):
-                im = Image.open(DATA_DIR + 'images_' + which_set + '_proc/' + str(fn) + '_' + itype + '.png')
+        if flatgrey:
+            trainx = np.zeros((2 * len(filenames), int(self.patch_size[0] / self.scale_factor),
+                               int(self.patch_size[1] / self.scale_factor)))
+            for ii, fn in enumerate(filenames):
+                for jj, itype in enumerate(('raw', 'proc')):
+                    im = Image.open(DATA_DIR + 'images_' + which_set + '_proc/' + str(fn) + '_' + itype + '.png').convert('L')
 
-                # resize
-                if self.scale_factor not in (None, 1, 1.):
-                    # why are these floats?
-                    w, h = [int(x) for x in im.size]
-                    im = im.resize((int(w / self.scale_factor), int(h / self.scale_factor)), Image.ANTIALIAS)
+                    # resize
+                    if self.scale_factor not in (None, 1, 1.):
+                        # why are these floats?
+                        w, h = [int(x) for x in im.size]
+                        im = im.resize((int(w / self.scale_factor), int(h / self.scale_factor)), Image.ANTIALIAS)
 
-                # from here on, work with 2D numpy array
-                im = np.squeeze(np.array(im, dtype=np.uint8))
+                    # from here on, work with 2D numpy array
+                    im = np.squeeze(np.array(im, dtype=np.uint8))
 
-                trainx[2 * ii + jj, :, :, :] = im
+                    trainx[2 * ii + jj, :, :] = im
 
-        trainx = np.reshape(trainx, (trainx.shape[0], np.prod(trainx.shape[1:])))
+            trainx = np.reshape(trainx, (trainx.shape[0], np.prod(trainx.shape[1:])))
+        else:
+            trainx = np.zeros((2 * len(filenames), int(self.patch_size[0] / self.scale_factor),
+                               int(self.patch_size[1] / self.scale_factor), 3))
+            for ii, fn in enumerate(filenames):
+                for jj, itype in enumerate(('raw', 'proc')):
+                    im = Image.open(DATA_DIR + 'images_' + which_set + '_proc/' + str(fn) + '_' + itype + '.png')
+
+                    # resize
+                    if self.scale_factor not in (None, 1, 1.):
+                        # why are these floats?
+                        w, h = [int(x) for x in im.size]
+                        im = im.resize((int(w / self.scale_factor), int(h / self.scale_factor)), Image.ANTIALIAS)
+
+                    # from here on, work with 2D numpy array
+                    im = np.squeeze(np.array(im, dtype=np.uint8))
+
+                    trainx[2 * ii + jj, :, :, :] = im
+
+            trainx = np.reshape(trainx, (trainx.shape[0], np.prod(trainx.shape[1:])))
+
         trainx = trainx.astype('float32')
 
         if SUBMODEL == 2:
@@ -77,6 +98,29 @@ class GZData(DenseDesignMatrix):
                     start = 0
                     stop = trainx.shape[0] - 1
                 y = np.hstack((
+                    # SMALL VERSION, 15 outputs
+                    # # 1.1 + 7.1/.2/.3
+                    # y[start:stop + 1, 15:18],
+                    # # 1.2 + 2.1 + 9.1/.2/.3
+                    # y[start:stop + 1, 25:28],
+                    # # 1.2 + 2.2 + 3.1 + 4.1 + 10.1/.2/.3
+                    # y[start:stop + 1, 5:6] *
+                    # (y[start:stop + 1, 7:8] / np.sum(y[start:stop + 1, 7:9], axis=1, keepdims=True)) *
+                    # (y[start:stop + 1, 28:31] / np.sum(y[start:stop + 1, 28:31], axis=1, keepdims=True)),
+                    # # 1.2 + 2.2 + 3.1 + 4.2
+                    # y[start:stop + 1, 5:6] *
+                    # (y[start:stop + 1, 8:9] / np.sum(y[start:stop + 1, 7:9], axis=1, keepdims=True)),
+                    # # 1.2 + 2.2 + 3.2 + 4.1 + 10.1/.2/.3
+                    # y[start:stop + 1, 6:7] *
+                    # (y[start:stop + 1, 7:8] / np.sum(y[start:stop + 1, 7:9], axis=1, keepdims=True)) *
+                    # (y[start:stop + 1, 28:31] / np.sum(y[start:stop + 1, 28:31], axis=1, keepdims=True)),
+                    # # 1.2 + 2.2 + 3.2 + 4.2
+                    # y[start:stop + 1, 6:7] *
+                    # (y[start:stop + 1, 8:9] / np.sum(y[start:stop + 1, 7:9], axis=1, keepdims=True)),
+                    # # 1.3
+                    # y[start:stop + 1, 2:3]
+
+                    # BIGGER VERSION, 159 outputs
                     # 1.1 + 7.1/.2/.3
                     y[start:stop + 1, 15:18],
                     # 1.2 + 2.1 + 9.1/.2/.3
@@ -163,80 +207,79 @@ class GZData(DenseDesignMatrix):
                 y[np.isnan(y)] = 0
                 y = np.repeat(y, 2, axis=0)
 
-        view = [int(x / self.scale_factor) for x in self.patch_size]
-        view.append(3)
-        view_converter = DefaultViewConverter(view, axes)
+        if flatgrey:
+            super(GZData, self).__init__(X=trainx, y=y)
+        else:
+            view = [int(x / self.scale_factor) for x in self.patch_size]
+            view.append(3)
+            view_converter = DefaultViewConverter(view, axes)
 
-        super(GZData, self).__init__(X=trainx, y=y, view_converter=view_converter)
+            super(GZData, self).__init__(X=trainx, y=y, view_converter=view_converter)
 
         assert not np.any(np.isnan(self.X))
 
 
-def get_data(tot=False):
-    train_path = DATA_DIR+'gz_preprocessed_train' + str(SUBMODEL) + '.pkl'
-    valid_path = DATA_DIR+'gz_preprocessed_valid' + str(SUBMODEL) + '.pkl'
-    tottrain_path = DATA_DIR+'gz_preprocessed_tottrain' + str(SUBMODEL) + '.pkl'
-    test_path = DATA_DIR+'gz_preprocessed_test' + str(SUBMODEL) + '.pkl'
+def get_data(tot=True, flatgrey=False):
+    tottrain_path = DATA_DIR+'gz_preprocessed_tottrain' + str(SUBMODEL) + '_fgx.pkl'
+    test_path = DATA_DIR+'gz_preprocessed_test' + str(SUBMODEL) + '_fgx.pkl'
 
-    if os.path.exists(train_path) and os.path.exists(valid_path) and os.path.exists(test_path):
+    if os.path.exists(test_path):
 
         print 'loading preprocessed data'
         datasets = OrderedDict()
-        datasets['train'] = serial.load(train_path)
-        datasets['valid'] = serial.load(valid_path)
+        # datasets['train'] = serial.load(train_path)
+        # datasets['valid'] = serial.load(valid_path)
         if tot:
             datasets['tottrain'] = serial.load(tottrain_path)
         datasets['test'] = serial.load(test_path)
         if tot:
-            return datasets['tottrain'], datasets['valid'], datasets['test']
+            return datasets['tottrain'], datasets['test']
         else:
-            return datasets['train'], datasets['valid'], datasets['test']
+            return datasets['train'], datasets['test']
     else:
-        print 'loading raw data...'
-        data = GalaxyZoo.gzdeepdata.GZData(which_set='training', start=0, stop=39999)
-
         print 'preprocessing data...'
         pipeline = preprocessing.Pipeline()
         pipeline.items.append(preprocessing.GlobalContrastNormalization(use_std=True))
         pipeline.items.append(preprocessing.ZCA())
 
-        print 'traindata'
-        data.apply_preprocessor(preprocessor=pipeline, can_fit=True)
-        # this path can be used for visualizing weights after training is done
-        data.yaml_src = '!pkl: "%s"' % data
-        # save
-        data.use_design_loc(DATA_DIR+'train_design' + str(SUBMODEL) + '.npy')
-        serial.save(DATA_DIR+'gz_preprocessed_train'+str(SUBMODEL) + '.pkl', data)
+        # print 'traindata'
+        # data = GalaxyZoo.gzdeepdata.GZData(which_set='training', start=0, stop=39999)
+        # data.apply_preprocessor(preprocessor=pipeline, can_fit=True)
+        # # this path can be used for visualizing weights after training is done
+        # data.yaml_src = '!pkl: "%s"' % data
+        # # save
+        # data.use_design_loc(DATA_DIR+'train_design' + str(SUBMODEL) + '.npy')
+        # serial.save(DATA_DIR+'gz_preprocessed_train'+str(SUBMODEL) + '.pkl', data)
 
-        print 'validdata'
-        data = GalaxyZoo.gzdeepdata.GZData(which_set='training', start=40000, stop=61577)
-        data.apply_preprocessor(preprocessor=pipeline, can_fit=False)
-        # this path can be used for visualizing weights after training is done
-        data.yaml_src = '!pkl: "%s"' % data
-        # save
-        data.use_design_loc(DATA_DIR+'valid_design' + str(SUBMODEL) + '.npy')
-        serial.save(DATA_DIR+'gz_preprocessed_valid'+str(SUBMODEL) + '.pkl', data)
-
-        print 'testdata'
-        data = GalaxyZoo.gzdeepdata.GZData(which_set='test')
-        data.apply_preprocessor(preprocessor=pipeline, can_fit=False)
-        # this path can be used for visualizing weights after training is done
-        data.yaml_src = '!pkl: "%s"' % data
-        # save
-        data.use_design_loc(DATA_DIR+'test_design' + str(SUBMODEL) + '.npy')
-        serial.save(DATA_DIR+'gz_preprocessed_test'+str(SUBMODEL) + '.pkl', data)
+        # print 'validdata'
+        # data = GalaxyZoo.gzdeepdata.GZData(which_set='training', start=40000, stop=61577)
+        # data.apply_preprocessor(preprocessor=pipeline, can_fit=False)
+        # # this path can be used for visualizing weights after training is done
+        # data.yaml_src = '!pkl: "%s"' % data
+        # # save
+        # data.use_design_loc(DATA_DIR+'valid_design' + str(SUBMODEL) + '.npy')
+        # serial.save(DATA_DIR+'gz_preprocessed_valid'+str(SUBMODEL) + '.pkl', data)
 
         print 'tottraindata'
-        data = GalaxyZoo.gzdeepdata.GZData(which_set='training')
+        data = GalaxyZoo.gzdeepdata.GZData(which_set='training', flatgrey=flatgrey)
         data.apply_preprocessor(preprocessor=pipeline, can_fit=True)
         # this path can be used for visualizing weights after training is done
         data.yaml_src = '!pkl: "%s"' % data
         # save
-        data.use_design_loc(DATA_DIR+'tottrain_design' + str(SUBMODEL) + '.npy')
-        serial.save(DATA_DIR+'gz_preprocessed_tottrain'+str(SUBMODEL) + '.pkl', data)
+        data.use_design_loc(DATA_DIR + 'tottrain_design' + str(SUBMODEL) + '_fgx.npy')
+        serial.save(DATA_DIR + 'gz_preprocessed_tottrain' + str(SUBMODEL) + '_fgx.pkl', data)
 
-        print 'Finished, now re-run'
-        return None, None, None
+        print 'testdata'
+        data = GalaxyZoo.gzdeepdata.GZData(which_set='test', flatgrey=flatgrey)
+        data.apply_preprocessor(preprocessor=pipeline, can_fit=False)
+        # this path can be used for visualizing weights after training is done
+        data.yaml_src = '!pkl: "%s"' % data
+        # save
+        data.use_design_loc(DATA_DIR + 'test_design' + str(SUBMODEL) + '_fgx.npy')
+        serial.save(DATA_DIR + 'gz_preprocessed_test' + str(SUBMODEL) + '_fgx.pkl', data)
+
+        print 'Finished, now re-run for running model on GPU'
+        return None, None
 
 if __name__ == '__main__':
     pass
