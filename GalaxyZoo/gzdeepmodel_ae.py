@@ -109,8 +109,8 @@ def construct_dbn_from_stack(stack):
 def get_finetuner(model, trainset, batch_size=100, epochs=100):
     train_algo = SGD(
         batch_size=batch_size,
-        learning_rule=Momentum(init_momentum=0.9),
-        learning_rate=0.01,
+        learning_rule=Momentum(init_momentum=0.5),
+        learning_rate=0.5,
         monitoring_batches=batch_size,
         monitoring_dataset=trainset,
         cost=Dropout(input_include_probs={'h0': .5}, input_scales={'h0': 2.}),
@@ -155,8 +155,8 @@ if __name__ == '__main__':
     trainset, testset = GalaxyZoo.gzdeepdata.get_data(flatgrey=True)
 
     structure = [4096, 3000, 2000, 2000, 2000, 2000]
-    #
-    # # pre-train model
+
+    # pre-train model
     # stack = construct_ae(structure)
     # for ii, layer in enumerate(stack.layers()):
     #     utraindata = trainset if ii == 0 else TransformerDataset(raw=trainset,
@@ -164,32 +164,32 @@ if __name__ == '__main__':
     #     pretrainer = get_ae_pretrainer(layer, utraindata, bsize, epochs=30)
     #     pretrainer.main_loop()
     # serial.save(DATA_DIR+'daex_pretrained.pkl', stack)
-    # # stack = serial.load(DATA_DIR + 'daex_pretrained.pkl')
-    #
-    # # construct DBN
-    # dbn = construct_dbn_from_stack(stack)
-    #
-    # # finetune softmax layer a bit
-    # finetuner = get_finetuner(dbn, trainset, bsize, epochs=15)
-    # finetuner.main_loop()
-    #
-    # # now finetune layer-by-layer, boost earlier layers
-    # lrs = [8., 6., 4., 2., 1.]
-    # for ii, lr in zip(range(len(structure)-1), lrs):
-    #     dbn.monitor = Monitor(dbn)
-    #     # set lr to boosted value for current layer
-    #     dbn.layers[ii].W_lr_scale = lr
-    #
-    #     finetuner = get_finetuner(dbn, trainset, bsize, epochs=30)
-    #     finetuner.main_loop()
-    #
-    #     # return to original lr
-    #     dbn.layers[ii].W_lr_scale = 1.
+    stack = serial.load(DATA_DIR + 'daex_pretrained.pkl')
+
+    # construct DBN
+    dbn = construct_dbn_from_stack(stack)
+
+    # finetune softmax layer a bit
+    finetuner = get_finetuner(dbn, trainset, bsize, epochs=15)
+    finetuner.main_loop()
+
+    # now finetune layer-by-layer, boost earlier layers
+    lrs = [8., 6., 4., 2., 1.]
+    for ii, lr in zip(range(len(structure)-1), lrs):
+        dbn.monitor = Monitor(dbn)
+        # set lr to boosted value for current layer
+        dbn.layers[ii].W_lr_scale = lr
+
+        finetuner = get_finetuner(dbn, trainset, bsize, epochs=30)
+        finetuner.main_loop()
+
+        # return to original lr
+        dbn.layers[ii].W_lr_scale = 1.
 
     # total finetuner
-    dbn = serial.load(DATA_DIR + 'model' + str(SUBMODEL) + 'saved_daex.pkl')
+    # dbn = serial.load(DATA_DIR + 'model' + str(SUBMODEL) + 'saved_daex.pkl')
     dbn.monitor = Monitor(dbn)
-    finetuner = get_finetuner(dbn, trainset, bsize, epochs=5)
+    finetuner = get_finetuner(dbn, trainset, bsize, epochs=150)
     finetuner.main_loop()
 
     outtrainset = get_output(dbn, trainset)

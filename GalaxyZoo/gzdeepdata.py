@@ -220,8 +220,8 @@ class GZData(DenseDesignMatrix):
 
 
 def get_data(tot=True, flatgrey=False):
-    tottrain_path = DATA_DIR+'gz_preprocessed_tottrain' + str(SUBMODEL) + '_fgx.pkl'
-    test_path = DATA_DIR+'gz_preprocessed_test' + str(SUBMODEL) + '_fgx.pkl'
+    tottrain_path = DATA_DIR+'gz_preprocessed_tottrain' + str(SUBMODEL) + '_64x.pkl'
+    test_path = DATA_DIR+'gz_preprocessed_test' + str(SUBMODEL) + '_64x.pkl'
 
     if os.path.exists(test_path):
 
@@ -266,8 +266,8 @@ def get_data(tot=True, flatgrey=False):
         # this path can be used for visualizing weights after training is done
         data.yaml_src = '!pkl: "%s"' % data
         # save
-        data.use_design_loc(DATA_DIR + 'tottrain_design' + str(SUBMODEL) + '_fgx.npy')
-        serial.save(DATA_DIR + 'gz_preprocessed_tottrain' + str(SUBMODEL) + '_fgx.pkl', data)
+        data.use_design_loc(DATA_DIR + 'tottrain_design' + str(SUBMODEL) + '_64x.npy')
+        serial.save(DATA_DIR + 'gz_preprocessed_tottrain' + str(SUBMODEL) + '_64x.pkl', data)
 
         print 'testdata'
         data = GalaxyZoo.gzdeepdata.GZData(which_set='test', flatgrey=flatgrey)
@@ -275,8 +275,8 @@ def get_data(tot=True, flatgrey=False):
         # this path can be used for visualizing weights after training is done
         data.yaml_src = '!pkl: "%s"' % data
         # save
-        data.use_design_loc(DATA_DIR + 'test_design' + str(SUBMODEL) + '_fgx.npy')
-        serial.save(DATA_DIR + 'gz_preprocessed_test' + str(SUBMODEL) + '_fgx.pkl', data)
+        data.use_design_loc(DATA_DIR + 'test_design' + str(SUBMODEL) + '_64x.npy')
+        serial.save(DATA_DIR + 'gz_preprocessed_test' + str(SUBMODEL) + '_64x.pkl', data)
 
         print 'Finished, now re-run for running model on GPU'
         return None, None
